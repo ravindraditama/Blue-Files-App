@@ -13,31 +13,10 @@ export interface ErrorResponse {
   error: string;
 }
 
-export type BlueFileRecordPosition = typeof BlueFileRecordPosition[keyof typeof BlueFileRecordPosition];
-
-
-export const BlueFileRecordPosition = {
-  L: 'L',
-  M: 'M',
-  R: 'R',
-} as const;
-
 export interface BlueFileRecord {
   id: string;
-  /** @nullable */
-  no: number | null;
   wo: string;
-  /** @nullable */
-  complete: string | null;
   place: string;
-  area: string;
-  rack: number;
-  position: BlueFileRecordPosition;
-  slot: number;
-  /** @nullable */
-  date_in: string | null;
-  /** @nullable */
-  time_in: string | null;
   /** @nullable */
   pic: string | null;
   created_at: string;
@@ -46,35 +25,11 @@ export interface BlueFileRecord {
 
 export type BlueFileRecordList = BlueFileRecord[];
 
-export type BlueFileRecordInputPosition = typeof BlueFileRecordInputPosition[keyof typeof BlueFileRecordInputPosition];
-
-
-export const BlueFileRecordInputPosition = {
-  L: 'L',
-  M: 'M',
-  R: 'R',
-} as const;
-
 export interface BlueFileRecordInput {
-  /** @nullable */
-  no?: number | null;
   /** @minLength 1 */
   wo: string;
-  /** @nullable */
-  complete?: string | null;
   /** @minLength 1 */
   place: string;
-  /** @minLength 1 */
-  area: string;
-  /** @minimum 1 */
-  rack: number;
-  position: BlueFileRecordInputPosition;
-  /** @minimum 1 */
-  slot: number;
-  /** @nullable */
-  date_in?: string | null;
-  /** @nullable */
-  time_in?: string | null;
   /** @nullable */
   pic?: string | null;
 }

@@ -5,24 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { BlueFileRecordPosition } from './blueFileRecordPosition';
 
 export interface BlueFileRecord {
   id: string;
-  /** @nullable */
-  no: number | null;
   wo: string;
-  /** @nullable */
-  complete: string | null;
   place: string;
-  area: string;
-  rack: number;
-  position: BlueFileRecordPosition;
-  slot: number;
-  /** @nullable */
-  date_in: string | null;
-  /** @nullable */
-  time_in: string | null;
   /** @nullable */
   pic: string | null;
   created_at: Date;

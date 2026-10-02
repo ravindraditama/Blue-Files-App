@@ -229,27 +229,10 @@ components:
         id:
           type: string
           format: uuid
-        no:
-          type: [integer, "null"]
         wo:
           type: string
-        complete:
-          type: [string, "null"]
         place:
           type: string
-        area:
-          type: string
-        rack:
-          type: integer
-        position:
-          type: string
-          enum: [L, M, R]
-        slot:
-          type: integer
-        date_in:
-          type: [string, "null"]
-        time_in:
-          type: [string, "null"]
         pic:
           type: [string, "null"]
         created_at:
@@ -260,16 +243,8 @@ components:
           format: date-time
       required:
         - id
-        - no
         - wo
-        - complete
         - place
-        - area
-        - rack
-        - position
-        - slot
-        - date_in
-        - time_in
         - pic
         - created_at
         - updated_at
@@ -280,35 +255,15 @@ components:
     BlueFileRecordInput:
       type: object
       properties:
-        no:
-          type: [integer, "null"]
         wo:
           type: string
           minLength: 1
-        complete:
-          type: [string, "null"]
         place:
           type: string
           minLength: 1
-        area:
-          type: string
-          minLength: 1
-        rack:
-          type: integer
-          minimum: 1
-        position:
-          type: string
-          enum: [L, M, R]
-        slot:
-          type: integer
-          minimum: 1
-        date_in:
-          type: [string, "null"]
-        time_in:
-          type: [string, "null"]
         pic:
           type: [string, "null"]
-      required: [wo, place, area, rack, position, slot]
+      required: [wo, place]
     BlueFileLocationInput:
       type: object
       properties:
