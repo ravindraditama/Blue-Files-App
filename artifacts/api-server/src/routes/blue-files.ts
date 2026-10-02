@@ -21,23 +21,25 @@ import {
 const router: IRouter = Router();
 
 type CanonicalBlueFileInput = {
-  no: number | null;
   wo: string;
-  complete: string | null;
   place: string;
-  area: string;
-  rack: number;
-  position: "L" | "M" | "R";
-  slot: number;
-  dateIn: string | null;
-  timeIn: string | null;
   pic: string | null;
 };
+
+const CONTINUATION_AREAS = ["R", "S", "T", "U", "V", "W"] as const;
+const CONTINUATION_AREA_SET = new Set<string>(CONTINUATION_AREAS);
+const CONTINUATION_RACKS = 18;
+const CONTINUATION_SLOTS = 15;
 
 class InputConflictError extends Error {}
 
 function parsePlace(value: string) {
-  const match = value.trim().toUpperCase().replace(/\s+/g, "").match(/^([A-Z]+)(\d+)([LMR])-(\d+)$/);
+  const cleaned = value.trim().toUpperCase().replace(/\s+/g, "");
+  const numericAreaAlias = cleaned.match(/^0(\d+)([LMR])-(\d+)$/);
+  const normalizedInput = numericAreaAlias
+    ? `O${numericAreaAlias[1]}${numericAreaAlias[2]}-${numericAreaAlias[3]}`
+    : cleaned;
+  const match = normalizedInput.match(/^([A-Z]+)(\d+)([LMR])-(\d+)$/);
   if (!match) return null;
 
   const area = match[1];
@@ -47,13 +49,19 @@ function parsePlace(value: string) {
   if (!Number.isSafeInteger(rack) || rack < 1 || !Number.isSafeInteger(slot) || slot < 1) {
     return null;
   }
+  if (
+    CONTINUATION_AREA_SET.has(area) &&
+    (rack > CONTINUATION_RACKS || slot > CONTINUATION_SLOTS)
+  ) {
+    return null;
+  }
 
   return {
     area,
     rack,
     position,
     slot,
-    place: `${area}${rack}${position}-${String(slot).padStart(3, "0")}`,
+    place: `${area}${String(rack).padStart(2, "0")}${position}-${String(slot).padStart(3, "0")}`,
   };
 }
 
@@ -62,31 +70,15 @@ function canonicalizeInput(
 ): CanonicalBlueFileInput {
   const location = parsePlace(input.place);
   if (!location) {
-    throw new InputConflictError("Invalid place. Use a code such as A16R-001.");
-  }
-  if (
-    input.area.trim().toUpperCase() !== location.area ||
-    input.rack !== location.rack ||
-    input.position.toUpperCase() !== location.position ||
-    input.slot !== location.slot
-  ) {
-    throw new InputConflictError("The place code does not match its location fields.");
+    throw new InputConflictError("Invalid place. Use a code such as A01R-001.");
   }
   if (!input.wo.trim()) {
     throw new InputConflictError("Work order is required.");
   }
 
   return {
-    no: input.no ?? null,
     wo: input.wo.trim().toUpperCase(),
-    complete: input.complete?.trim() || null,
     place: location.place,
-    area: location.area,
-    rack: location.rack,
-    position: location.position,
-    slot: location.slot,
-    dateIn: input.date_in?.trim() || null,
-    timeIn: input.time_in?.trim() || null,
     pic: input.pic?.trim() || null,
   };
 }
@@ -94,16 +86,8 @@ function canonicalizeInput(
 function serializeRecord(record: typeof blueFileRecordsTable.$inferSelect) {
   return {
     id: record.id,
-    no: record.no,
     wo: record.wo,
-    complete: record.complete,
     place: record.place,
-    area: record.area,
-    rack: record.rack,
-    position: record.position,
-    slot: record.slot,
-    date_in: record.dateIn,
-    time_in: record.timeIn,
     pic: record.pic,
     created_at: record.createdAt.toISOString(),
     updated_at: record.updatedAt.toISOString(),
@@ -131,21 +115,14 @@ router.get("/blue-file-records", async (_req, res): Promise<void> => {
   const records = await db
     .select()
     .from(blueFileRecordsTable)
-    .orderBy(
-      asc(blueFileRecordsTable.area),
-      asc(blueFileRecordsTable.rack),
-      asc(blueFileRecordsTable.position),
-      asc(blueFileRecordsTable.slot),
-    );
+    .orderBy(asc(blueFileRecordsTable.place));
   res.json(ListBlueFilesResponse.parse(records.map(serializeRecord)));
 });
 
 router.get("/blue-file-records/summary", async (_req, res): Promise<void> => {
   const records = await db
     .select({
-      area: blueFileRecordsTable.area,
-      rack: blueFileRecordsTable.rack,
-      slot: blueFileRecordsTable.slot,
+      place: blueFileRecordsTable.place,
     })
     .from(blueFileRecordsTable);
   const areaMap = new Map<
@@ -153,18 +130,33 @@ router.get("/blue-file-records/summary", async (_req, res): Promise<void> => {
     { occupied: number; racks: Set<number>; maxRack: number; maxSlot: number }
   >();
 
+  for (const area of CONTINUATION_AREAS) {
+    areaMap.set(area, {
+      occupied: 0,
+      racks: new Set(
+        Array.from({ length: CONTINUATION_RACKS }, (_, index) => index + 1),
+      ),
+      maxRack: CONTINUATION_RACKS,
+      maxSlot: CONTINUATION_SLOTS,
+    });
+  }
+
   for (const record of records) {
-    const current = areaMap.get(record.area) ?? {
+    const location = parsePlace(record.place);
+    if (!location) {
+      throw new Error(`Invalid saved place code: ${record.place}`);
+    }
+    const current = areaMap.get(location.area) ?? {
       occupied: 0,
       racks: new Set<number>(),
       maxRack: 0,
       maxSlot: 0,
     };
     current.occupied += 1;
-    current.racks.add(record.rack);
-    current.maxRack = Math.max(current.maxRack, record.rack);
-    current.maxSlot = Math.max(current.maxSlot, record.slot);
-    areaMap.set(record.area, current);
+    current.racks.add(location.rack);
+    current.maxRack = Math.max(current.maxRack, location.rack);
+    current.maxSlot = Math.max(current.maxSlot, location.slot);
+    areaMap.set(location.area, current);
   }
 
   const areas = Array.from(areaMap, ([area, value]) => ({
@@ -173,7 +165,9 @@ router.get("/blue-file-records/summary", async (_req, res): Promise<void> => {
     racks: value.racks.size,
     max_rack: value.maxRack,
     max_slot: value.maxSlot,
-    capacity: value.maxRack * 3 * value.maxSlot,
+    capacity: CONTINUATION_AREA_SET.has(area)
+      ? CONTINUATION_RACKS * 3 * CONTINUATION_SLOTS
+      : value.maxRack * 3 * value.maxSlot,
   })).sort((a, b) => a.area.localeCompare(b.area));
   const occupied = records.length;
   const totalCapacity = areas.reduce((total, area) => total + area.capacity, 0);
@@ -284,15 +278,7 @@ router.post("/blue-file-records/import", async (req, res): Promise<void> => {
           .onConflictDoUpdate({
             target: blueFileRecordsTable.wo,
             set: {
-              no: sql`excluded.no`,
-              complete: sql`excluded.complete`,
               place: sql`excluded.place`,
-              area: sql`excluded.area`,
-              rack: sql`excluded.rack`,
-              position: sql`excluded.position`,
-              slot: sql`excluded.slot`,
-              dateIn: sql`excluded.date_in`,
-              timeIn: sql`excluded.time_in`,
               pic: sql`excluded.pic`,
               updatedAt: sql`now()`,
             },
@@ -374,7 +360,7 @@ router.patch("/blue-file-records/:id/move", async (req, res): Promise<void> => {
   }
   const location = parsePlace(parsed.data.place);
   if (!location) {
-    res.status(400).json(errorBody("Invalid place. Use a code such as A16R-001."));
+    res.status(400).json(errorBody("Invalid place. Use a code such as A01R-001."));
     return;
   }
 
@@ -383,10 +369,6 @@ router.patch("/blue-file-records/:id/move", async (req, res): Promise<void> => {
       .update(blueFileRecordsTable)
       .set({
         place: location.place,
-        area: location.area,
-        rack: location.rack,
-        position: location.position,
-        slot: location.slot,
       })
       .where(eq(blueFileRecordsTable.id, params.data.id))
       .returning();

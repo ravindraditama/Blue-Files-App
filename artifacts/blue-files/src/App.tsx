@@ -15,56 +15,51 @@ import {
 } from '@workspace/api-client-react';
 import * as XLSX from 'xlsx';
 import {
-  AlertCircle, AlertTriangle, ArrowDownToLine, CalendarDays, Check,
-  CheckCircle2, ChevronDown, ChevronRight, Clock3, FileSpreadsheet, FileText,
-  FolderTree, Hash, Layers3, MapPin, Move, Package, PackageCheck, Plus,
+  AlertCircle, AlertTriangle, ArrowDownToLine, Check, CheckCircle2,
+  ChevronDown, ChevronRight, FileSpreadsheet, FileText, FolderTree, Layers3,
+  MapPin, Move, Package, PackageCheck, Plus,
   Search, Trash2, TrendingUp, UploadCloud, UserRound, X,
 } from 'lucide-react';
 
 type SearchType = 'wo' | 'place' | 'pic';
 type ToastState = { message: string; type: 'success' | 'error' } | null;
-type Place = Pick<BlueFileRecord, 'place' | 'area' | 'rack' | 'position' | 'slot'>;
+type Place = { place: string; area: string; rack: number; position: 'L' | 'M' | 'R'; slot: number };
 
 const POSITIONS = ['L', 'M', 'R'] as const;
+const CONTINUATION_AREAS = new Set(['R', 'S', 'T', 'U', 'V', 'W']);
 
 function parsePlace(value: string): Place | null {
-  const match = value.trim().toUpperCase().replace(/\s+/g, '').match(/^([A-Z]+)(\d+)([LMR])-(\d+)$/);
+  const cleaned = value.trim().toUpperCase().replace(/\s+/g, '');
+  const numericAreaAlias = cleaned.match(/^0(\d+)([LMR])-(\d+)$/);
+  const normalizedInput = numericAreaAlias
+    ? `O${numericAreaAlias[1]}${numericAreaAlias[2]}-${numericAreaAlias[3]}`
+    : cleaned;
+  const match = normalizedInput.match(/^([A-Z]+)(\d+)([LMR])-(\d+)$/);
   if (!match) return null;
   const area = match[1];
   const rack = Number(match[2]);
   const slot = Number(match[4]);
   if (rack < 1 || slot < 1 || !Number.isSafeInteger(rack) || !Number.isSafeInteger(slot)) return null;
+  if (CONTINUATION_AREAS.has(area) && (rack > 18 || slot > 15)) return null;
   return {
     area,
     rack,
-    position: match[3] as BlueFileRecord['position'],
+    position: match[3] as 'L' | 'M' | 'R',
     slot,
     place: `${area}${String(rack).padStart(2, '0')}${match[3]}-${String(slot).padStart(3, '0')}`,
   };
 }
 
 function placeInput(input: {
-  no: string | number | null;
   wo: string;
-  complete: string | null;
   place: string;
-  date_in: string | null;
-  time_in: string | null;
   pic: string | null;
 }): BlueFileRecordInput | null {
   const parsed = parsePlace(input.place);
   if (!parsed || !input.wo.trim()) return null;
   return {
-    no: input.no === '' ? null : typeof input.no === 'number' ? input.no : Number(input.no) || null,
     wo: input.wo.trim().toUpperCase(),
-    complete: input.complete?.trim() || null,
     place: parsed.place,
-    area: parsed.area,
-    rack: parsed.rack,
-    position: parsed.position,
-    slot: parsed.slot,
-    date_in: input.date_in?.trim() || null,
-    time_in: input.time_in?.trim() || null,
     pic: input.pic?.trim() || null,
   };
 }
@@ -111,20 +106,28 @@ function App() {
   );
   const areas = useMemo(() => {
     const known = areaInfo.map((area) => area.area);
-    for (const row of records) if (!known.includes(row.area)) known.push(row.area);
+    for (const row of records) {
+      const location = parsePlace(row.place);
+      if (location && !known.includes(location.area)) known.push(location.area);
+    }
     return known.sort((a, b) => a.localeCompare(b));
   }, [areaInfo, records]);
 
   if (!selectedArea && areas.length) setSelectedArea(areas[0]);
 
   const activeAreaSummary = areaInfo.find((a) => a.area === selectedArea);
-  const areaRows = records.filter((row) => row.area === selectedArea);
-  const maxRack = activeAreaSummary?.max_rack ?? Math.max(0, ...areaRows.map((row) => row.rack));
-  const maxSlot = activeAreaSummary?.max_slot ?? Math.max(0, ...areaRows.map((row) => row.slot));
+  const areaRows = records.flatMap((record) => {
+    const location = parsePlace(record.place);
+    return location?.area === selectedArea ? [{ record, location }] : [];
+  });
+  const maxRack = activeAreaSummary?.max_rack ?? Math.max(0, ...areaRows.map(({ location }) => location.rack));
+  const maxSlot = activeAreaSummary?.max_slot ?? Math.max(0, ...areaRows.map(({ location }) => location.slot));
   const rackNumbers = Array.from({ length: maxRack }, (_, i) => i + 1);
   const rackRecords = useMemo(() => {
     const map = new Map<string, BlueFileRecord>();
-    for (const row of areaRows) map.set(`${row.rack}-${row.position}-${row.slot}`, row);
+    for (const { record, location } of areaRows) {
+      map.set(`${location.rack}-${location.position}-${location.slot}`, record);
+    }
     return map;
   }, [areaRows]);
 
@@ -143,14 +146,16 @@ function App() {
       const matches = records.filter((row) => row.wo.toUpperCase().includes(query.toUpperCase()));
       if (!matches.length) return showToast(`No records found for WO "${query}"`, 'error');
       const match = matches[0];
-      setSelectedArea(match.area);
-      setOpenRack(match.rack);
+      const location = parsePlace(match.place);
+      if (!location) return showToast(`Invalid saved location for ${match.wo}`, 'error');
+      setSelectedArea(location.area);
+      setOpenRack(location.rack);
       setHighlightPlace(match.place);
       setSelectedRecord(match);
       showToast(matches.length > 1 ? `Found ${matches.length} work orders matching "${query}"` : `Found ${match.wo} at ${match.place}`);
     } else if (searchType === 'place') {
       const place = parsePlace(query);
-      if (!place) return showToast('Invalid place format. Use a code such as A16R-001.', 'error');
+      if (!place) return showToast('Invalid place format. Use a code such as A01R-001.', 'error');
       const match = records.find((row) => row.place.toUpperCase() === place.place);
       setSelectedArea(place.area);
       setOpenRack(place.rack);
@@ -162,8 +167,10 @@ function App() {
       const matches = records.filter((row) => (row.pic ?? '').toUpperCase().includes(query.toUpperCase()));
       if (!matches.length) return showToast(`No records found for PIC "${query}"`, 'error');
       const match = matches[0];
-      setSelectedArea(match.area);
-      setOpenRack(match.rack);
+      const location = parsePlace(match.place);
+      if (!location) return showToast(`Invalid saved location for ${match.wo}`, 'error');
+      setSelectedArea(location.area);
+      setOpenRack(location.rack);
       setHighlightPlace(match.place);
       setSelectedRecord(match);
       showToast(`Found ${matches.length} record${matches.length === 1 ? '' : 's'} for PIC "${query}"`);
@@ -289,7 +296,7 @@ function App() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   {areas.map((area) => {
                     const info = areaInfo.find((entry) => entry.area === area);
-                    const occupied = info?.occupied ?? records.filter((row) => row.area === area).length;
+                    const occupied = info?.occupied ?? records.filter((row) => parsePlace(row.place)?.area === area).length;
                     return <button key={area} data-testid={`button-area-${area}`} onClick={() => { setSelectedArea(area); setOpenRack(null); setHighlightPlace(''); }} className={`relative flex min-w-[58px] items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-bold transition ${selectedArea === area ? 'border-sky-400/70 bg-sky-500 text-slate-950 shadow-[0_5px_14px_rgba(14,165,233,.18)]' : 'border-slate-700 bg-slate-800/70 text-slate-300 hover:border-slate-600 hover:bg-slate-800'}`}><span>{area}</span><span className={`mono text-[10px] ${selectedArea === area ? 'text-slate-900/70' : 'text-slate-500'}`}>{occupied}</span></button>;
                   })}
                 </div>
@@ -315,7 +322,7 @@ function App() {
               </div>
               <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-16">
                 {rackNumbers.map((rack) => {
-                  const count = areaRows.filter((row) => row.rack === rack).length;
+                  const count = areaRows.filter(({ location }) => location.rack === rack).length;
                   return <button key={rack} data-testid={`button-rack-${selectedArea}-${rack}`} onClick={() => setOpenRack(openRack === rack ? null : rack)} className={`flex min-h-[54px] flex-col items-center justify-center rounded-lg border transition ${openRack === rack ? 'border-sky-400/60 bg-sky-500 text-slate-950 shadow-sm' : 'border-slate-800 bg-slate-800/60 text-slate-300 hover:border-slate-600 hover:bg-slate-800'}`}><span className="mono text-[13px] font-medium">{String(rack).padStart(2, '0')}</span><span className={`mt-0.5 text-[9px] ${openRack === rack ? 'text-slate-900/70' : count ? 'text-slate-500' : 'text-slate-700'}`}>{count} file{count === 1 ? '' : 's'}</span></button>;
                 })}
               </div>
@@ -419,12 +426,8 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
   const [view, setView] = useState<'view' | 'edit' | 'move' | 'delete'>(mode === 'add' ? 'edit' : 'view');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    no: record?.no?.toString() ?? '',
     wo: record?.wo ?? '',
-    complete: record?.complete ?? '',
     place: record?.place ?? defaultPlace,
-    date_in: record?.date_in ?? '',
-    time_in: record?.time_in ?? '',
     pic: record?.pic ?? '',
   });
   const parsed = parsePlace(form.place);
@@ -436,7 +439,7 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
 
   const submitSave = async () => {
     if (!canSave) return;
-    const input = placeInput({ ...form, no: form.no });
+    const input = placeInput(form);
     if (!input) return;
     setSaving(true);
     const ok = await onSave(input);
@@ -447,7 +450,7 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
   const field = (label: string, key: keyof typeof form, props: { required?: boolean; mono?: boolean; type?: string; placeholder?: string } = {}) => (
     <label className="block min-w-0">
       <span className="mb-1.5 block text-[11px] font-semibold text-slate-400">{label}{props.required && <span className="ml-1 text-red-400">*</span>}</span>
-      <input data-testid={`input-record-${key}`} type={props.type ?? 'text'} value={form[key]} placeholder={props.placeholder} onChange={(event) => setForm({ ...form, [key]: key === 'wo' || key === 'place' ? event.target.value.toUpperCase() : event.target.value })} className={`h-10 w-full rounded-lg border border-slate-700 bg-[#0d1521] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/10 ${props.mono ? 'mono' : ''}`} />
+      <input data-testid={`input-record-${key}`} type={props.type ?? 'text'} value={form[key]} placeholder={props.placeholder} onChange={(event) => setForm({ ...form, [key]: key === 'wo' || key === 'place' ? event.target.value.toUpperCase() : event.target.value })} onBlur={() => { if (key === 'place') { const location = parsePlace(form.place); if (location) setForm({ ...form, place: location.place }); } }} className={`h-10 w-full rounded-lg border border-slate-700 bg-[#0d1521] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/10 ${props.mono ? 'mono' : ''}`} />
     </label>
   );
 
@@ -464,29 +467,24 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
 
       <div className="max-h-[min(68vh,650px)] overflow-y-auto px-5 py-5 sm:px-6">
         {(view === 'edit') && <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">{field('No', 'no', { type: 'number', placeholder: 'Optional' })}{field('WO', 'wo', { required: true, placeholder: 'e.g. WO-2024-001' })}</div>
+          {field('WO', 'wo', { required: true, placeholder: 'e.g. WO-2024-001' })}
           {duplicateWo && <p className="-mt-3 text-[11px] text-red-400">This work order already exists.</p>}
-          {field('Place', 'place', { required: true, mono: true, placeholder: 'e.g. A16R-001' })}
-          {form.place && !parsed && <p className="-mt-3 text-[11px] text-red-400">Invalid format. Use a place code such as A16R-001.</p>}
+          {field('Place', 'place', { required: true, mono: true, placeholder: 'e.g. A01R-001' })}
+          {form.place && !parsed && <p className="-mt-3 text-[11px] text-red-400">Invalid format. Use a place code such as A01R-001.</p>}
           {duplicatePlace && <p className="-mt-3 text-[11px] text-red-400">This place is already assigned.</p>}
           {parsed && <div className="-mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-500"><span className="rounded bg-slate-800 px-2 py-1">Area {parsed.area}</span><span className="rounded bg-slate-800 px-2 py-1">Rack {parsed.rack}</span><span className="rounded bg-slate-800 px-2 py-1">Position {parsed.position}</span><span className="rounded bg-slate-800 px-2 py-1">Slot {parsed.slot}</span></div>}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{field('Complete', 'complete', { placeholder: 'Optional' })}{field('Date In', 'date_in', { placeholder: 'Optional' })}{field('Time In', 'time_in', { placeholder: 'Optional' })}</div>
           {field('PIC', 'pic', { placeholder: 'Person in charge' })}
         </div>}
         {view === 'view' && record && <div className="space-y-4">
           <div className="flex items-center gap-3 rounded-xl border border-sky-500/15 bg-sky-500/[.06] p-3.5"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-300"><MapPin className="h-4 w-4" /></span><div><div className="text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500">Current location</div><div data-testid="text-record-place" className="mono mt-0.5 text-[14px] font-medium text-sky-300">{record.place}</div></div></div>
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-            <DetailItem icon={Hash} label="No" value={record.no ?? '—'} testId="text-record-number" />
-            <DetailItem icon={FileText} label="Complete" value={record.complete || '—'} testId="text-record-complete" />
-            <DetailItem icon={CalendarDays} label="Date In" value={record.date_in || '—'} testId="text-record-date" />
-            <DetailItem icon={Clock3} label="Time In" value={record.time_in || '—'} testId="text-record-time" />
             <DetailItem icon={UserRound} label="PIC" value={record.pic || '—'} testId="text-record-pic" />
           </div>
         </div>}
         {view === 'move' && record && <div className="space-y-4">
           <div className="rounded-xl border border-slate-800 bg-[#0d1521] p-3"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500">Current location</p><p className="mono mt-1 text-sm text-sky-300">{record.place}</p></div>
-          <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-slate-400">New location <span className="text-slate-600">(e.g. B05L-003)</span></span><input data-testid="input-move-place" autoFocus value={form.place} onChange={(event) => setForm({ ...form, place: event.target.value.toUpperCase().replace(/\s+/g, '') })} placeholder="Enter a new place code" className="mono h-10 w-full rounded-lg border border-slate-700 bg-[#0d1521] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/10" /></label>
-          {form.place && !parsed && <p className="-mt-3 text-[11px] text-red-400">Invalid format. Use a code like A16R-001.</p>}
+          <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-slate-400">New location <span className="text-slate-600">(e.g. B05L-003)</span></span><input data-testid="input-move-place" autoFocus value={form.place} onChange={(event) => setForm({ ...form, place: event.target.value.toUpperCase().replace(/\s+/g, '') })} onBlur={() => { const location = parsePlace(form.place); if (location) setForm({ ...form, place: location.place }); }} placeholder="Enter a new place code" className="mono h-10 w-full rounded-lg border border-slate-700 bg-[#0d1521] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/10" /></label>
+          {form.place && !parsed && <p className="-mt-3 text-[11px] text-red-400">Invalid format. Use a code like A01R-001.</p>}
           {parsed && duplicatePlace && <p className="-mt-3 text-[11px] text-red-400">This location is already occupied.</p>}
           {parsed && !duplicatePlace && <p className="-mt-3 text-[11px] text-emerald-400">{parsed.place} is available.</p>}
         </div>}
@@ -517,7 +515,7 @@ function DetailItem({ icon: Icon, label, value, testId }: { icon: typeof Hash; l
   return <div className="flex min-w-0 items-center gap-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-slate-500"><Icon className="h-3.5 w-3.5" /></span><span className="min-w-0"><span className="block text-[10px] text-slate-500">{label}</span><span data-testid={testId} className="mt-0.5 block truncate text-xs font-medium text-slate-200">{value}</span></span></div>;
 }
 
-type ImportRow = { no?: number | null; wo: string; complete?: string | null; place: string; area: string; rack: number; position: BlueFileRecord['position']; slot: number; date_in?: string | null; time_in?: string | null; pic?: string | null };
+type ImportRow = { wo: string; place: string; pic: string | null };
 type ImportResult = { inserted: number; updated: number };
 
 function ImportDialog({ records, pending, onClose, onImport }: { records: BlueFileRecord[]; pending: boolean; onClose: () => void; onImport: (rows: ImportRow[]) => Promise<ImportResult> }) {
@@ -558,16 +556,12 @@ function ImportDialog({ records, pending, onClose, onImport }: { records: BlueFi
           for (const key of keys) if (row[key.toLowerCase().replace(/\s+/g, '')] !== undefined) return row[key.toLowerCase().replace(/\s+/g, '')];
           return '';
         };
-        const noValue = get('No', 'No.');
-        const parsedNo = noValue ? Number.parseInt(noValue, 10) : null;
         const wo = get('WO').toUpperCase();
         const place = get('Place').toUpperCase().replace(/\s+/g, '');
-        const complete = get('Complete');
-        const dateIn = get('DateIn', 'Date In', 'Date');
-        const timeIn = get('TimeIn', 'Time In', 'Time');
         const pic = get('PIC');
         if (!wo && !place) return;
-        const rowLabel = `Row ${Number.isNaN(parsedNo) || parsedNo === null ? '?' : parsedNo}`;
+        const rowLabel = `Row ${index + 2}`;
+        if (/^CSA\(.*\)$/i.test(place)) { invalid.push(`${rowLabel}: CSA location skipped`); return; }
         const parsedPlace = parsePlace(place);
         if (!parsedPlace) { invalid.push(`${rowLabel}: Invalid place "${place}"`); return; }
         if (!wo) { invalid.push(`${rowLabel}: Missing WO`); return; }
@@ -575,7 +569,7 @@ function ImportDialog({ records, pending, onClose, onImport }: { records: BlueFi
         if (seenPlace.has(parsedPlace.place)) { invalid.push(`${rowLabel}: Duplicate Place "${parsedPlace.place}" within file`); return; }
         seenWo.add(wo);
         seenPlace.add(parsedPlace.place);
-        parsedRows.push({ no: Number.isNaN(parsedNo) ? null : parsedNo, wo, complete: complete || null, place: parsedPlace.place, area: parsedPlace.area, rack: parsedPlace.rack, position: parsedPlace.position, slot: parsedPlace.slot, date_in: dateIn || null, time_in: timeIn || null, pic: pic || null });
+        parsedRows.push({ wo, place: parsedPlace.place, pic: pic || null });
       });
       setRows(parsedRows);
       setInvalidRows(invalid);
@@ -606,7 +600,7 @@ function ImportDialog({ records, pending, onClose, onImport }: { records: BlueFi
   return <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section role="dialog" aria-modal="true" aria-labelledby="import-title" data-testid="dialog-import" className="modal-panel my-auto w-full max-w-[690px] overflow-hidden rounded-2xl border border-slate-700 bg-[#131d2b] shadow-2xl">
       <header className="flex items-start justify-between border-b border-slate-800 px-5 py-4 sm:px-6">
-        <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300"><FileSpreadsheet className="h-5 w-5" /></span><div><h2 id="import-title" className="font-bold text-slate-100">Import from Excel</h2><p className="mt-0.5 text-[11px] text-slate-500">Columns: No, WO, Complete, Place, Date In, Time In, PIC</p></div></div>
+        <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300"><FileSpreadsheet className="h-5 w-5" /></span><div><h2 id="import-title" className="font-bold text-slate-100">Import from Excel</h2><p className="mt-0.5 text-[11px] text-slate-500">Saved fields: WO, Place, PIC</p></div></div>
         <button data-testid="button-close-import" aria-label="Close import dialog" onClick={onClose} disabled={busy} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"><X className="h-5 w-5" /></button>
       </header>
       <div className="max-h-[min(68vh,620px)] overflow-y-auto p-5 sm:p-6">
@@ -621,12 +615,12 @@ function ImportDialog({ records, pending, onClose, onImport }: { records: BlueFi
             <p className="mt-1.5 text-[11px] text-slate-500">Supports .xlsx, .xls and .csv · existing records update automatically</p>
             <input ref={inputRef} data-testid="input-import-file" type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.currentTarget.value = ''; }} className="hidden" />
           </div>
-          <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-slate-800 bg-[#0e1723] p-3 text-[11px] leading-5 text-slate-500"><FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-600" /><p>Use a header row with <span className="text-slate-300">No, WO, Complete, Place, Date In, Time In, PIC</span>. Place format: <span className="mono text-slate-300">A16R-001</span>.</p></div>
+          <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-slate-800 bg-[#0e1723] p-3 text-[11px] leading-5 text-slate-500"><FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-600" /><p>Use a header row with <span className="text-slate-300">WO, Place, PIC</span>. Place format: <span className="mono text-slate-300">A01R-001</span>. Other spreadsheet columns are ignored.</p></div>
         </div> : <>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0d1521] p-3.5"><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-300"><FileSpreadsheet className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-xs font-semibold text-slate-200">{fileName}</span><span className="mt-0.5 block text-[10px] text-slate-500">{rows.length} valid row{rows.length === 1 ? '' : 's'} · {invalidRows.length} skipped</span></span></div><button data-testid="button-change-import-file" onClick={resetFile} className="text-[11px] font-semibold text-sky-300 hover:text-sky-200">Choose another</button></div>
           <div className="mt-3 flex items-center gap-2 rounded-lg border border-sky-500/15 bg-sky-500/[.05] px-3 py-2.5 text-[11px] text-sky-100/70"><ArrowDownToLine className="h-3.5 w-3.5 text-sky-300" />{rows.length} records ready · {expectedUpdates} matching existing record{expectedUpdates === 1 ? '' : 's'} will be updated.</div>
           {invalidRows.length > 0 && <InvalidRows rows={invalidRows} />}
-          {rows.length > 0 && <div className="mt-4 overflow-hidden rounded-xl border border-slate-800"><div className="flex items-center justify-between bg-[#0d1521] px-3.5 py-2.5"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">Preview · first {Math.min(rows.length, 6)} rows</span><span className="text-[10px] text-slate-600">{rows.length} total</span></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-[11px]"><thead><tr className="border-y border-slate-800 bg-slate-900/60 text-slate-500"><th className="px-3 py-2 font-semibold">No</th><th className="px-3 py-2 font-semibold">WO</th><th className="px-3 py-2 font-semibold">Place</th><th className="px-3 py-2 font-semibold">Date In</th><th className="px-3 py-2 font-semibold">PIC</th></tr></thead><tbody>{rows.slice(0, 6).map((row, index) => <tr data-testid={`row-import-preview-${index}`} key={`${row.wo}-${index}`} className="border-b border-slate-800/80 last:border-0"><td className="px-3 py-2 text-slate-500">{row.no ?? '—'}</td><td className="px-3 py-2 font-semibold text-slate-200">{row.wo}</td><td className="mono px-3 py-2 text-sky-300">{row.place}</td><td className="px-3 py-2 text-slate-400">{row.date_in || '—'}</td><td className="px-3 py-2 text-slate-400">{row.pic || '—'}</td></tr>)}</tbody></table></div></div>}
+          {rows.length > 0 && <div className="mt-4 overflow-hidden rounded-xl border border-slate-800"><div className="flex items-center justify-between bg-[#0d1521] px-3.5 py-2.5"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">Preview · first {Math.min(rows.length, 6)} rows</span><span className="text-[10px] text-slate-600">{rows.length} total</span></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-[11px]"><thead><tr className="border-y border-slate-800 bg-slate-900/60 text-slate-500"><th className="px-3 py-2 font-semibold">WO</th><th className="px-3 py-2 font-semibold">Place</th><th className="px-3 py-2 font-semibold">PIC</th></tr></thead><tbody>{rows.slice(0, 6).map((row, index) => <tr data-testid={`row-import-preview-${index}`} key={`${row.wo}-${index}`} className="border-b border-slate-800/80 last:border-0"><td className="px-3 py-2 font-semibold text-slate-200">{row.wo}</td><td className="mono px-3 py-2 text-sky-300">{row.place}</td><td className="px-3 py-2 text-slate-400">{row.pic || '—'}</td></tr>)}</tbody></table></div></div>}
         </>}
         {error && <div data-testid="status-import-error" className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/[.07] px-3 py-2.5 text-xs text-red-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />{error}</div>}
       </div>

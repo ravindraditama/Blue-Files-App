@@ -22,16 +22,8 @@ export const HealthCheckResponse = zod.object({
  */
 export const ListBlueFilesResponseItem = zod.object({
   "id": zod.string().uuid(),
-  "no": zod.number().int().nullable(),
   "wo": zod.string(),
-  "complete": zod.string().nullable(),
   "place": zod.string(),
-  "area": zod.string(),
-  "rack": zod.number().int(),
-  "position": zod.enum(['L', 'M', 'R']),
-  "slot": zod.number().int(),
-  "date_in": zod.string().nullable(),
-  "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
@@ -46,35 +38,16 @@ export const ListBlueFilesResponse = zod.array(ListBlueFilesResponseItem)
 
 
 
-
-
-
 export const CreateBlueFileBody = zod.object({
-  "no": zod.number().int().nullish(),
   "wo": zod.string().min(1),
-  "complete": zod.string().nullish(),
   "place": zod.string().min(1),
-  "area": zod.string().min(1),
-  "rack": zod.number().int().min(1),
-  "position": zod.enum(['L', 'M', 'R']),
-  "slot": zod.number().int().min(1),
-  "date_in": zod.string().nullish(),
-  "time_in": zod.string().nullish(),
   "pic": zod.string().nullish()
 })
 
 export const CreateBlueFileResponse = zod.object({
   "id": zod.string().uuid(),
-  "no": zod.number().int().nullable(),
   "wo": zod.string(),
-  "complete": zod.string().nullable(),
   "place": zod.string(),
-  "area": zod.string(),
-  "rack": zod.number().int(),
-  "position": zod.enum(['L', 'M', 'R']),
-  "slot": zod.number().int(),
-  "date_in": zod.string().nullable(),
-  "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
@@ -105,25 +78,14 @@ export const GetBlueFilesSummaryResponse = zod.object({
  */
 
 
-
-
-
 export const importBlueFilesBodyRecordsMax = 10000;
 
 
 
 export const ImportBlueFilesBody = zod.object({
   "records": zod.array(zod.object({
-  "no": zod.number().int().nullish(),
   "wo": zod.string().min(1),
-  "complete": zod.string().nullish(),
   "place": zod.string().min(1),
-  "area": zod.string().min(1),
-  "rack": zod.number().int().min(1),
-  "position": zod.enum(['L', 'M', 'R']),
-  "slot": zod.number().int().min(1),
-  "date_in": zod.string().nullish(),
-  "time_in": zod.string().nullish(),
   "pic": zod.string().nullish()
 })).min(1).max(importBlueFilesBodyRecordsMax)
 })
@@ -145,35 +107,16 @@ export const UpdateBlueFileParams = zod.object({
 
 
 
-
-
-
 export const UpdateBlueFileBody = zod.object({
-  "no": zod.number().int().nullish(),
   "wo": zod.string().min(1),
-  "complete": zod.string().nullish(),
   "place": zod.string().min(1),
-  "area": zod.string().min(1),
-  "rack": zod.number().int().min(1),
-  "position": zod.enum(['L', 'M', 'R']),
-  "slot": zod.number().int().min(1),
-  "date_in": zod.string().nullish(),
-  "time_in": zod.string().nullish(),
   "pic": zod.string().nullish()
 })
 
 export const UpdateBlueFileResponse = zod.object({
   "id": zod.string().uuid(),
-  "no": zod.number().int().nullable(),
   "wo": zod.string(),
-  "complete": zod.string().nullable(),
   "place": zod.string(),
-  "area": zod.string(),
-  "rack": zod.number().int(),
-  "position": zod.enum(['L', 'M', 'R']),
-  "slot": zod.number().int(),
-  "date_in": zod.string().nullable(),
-  "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
@@ -206,16 +149,8 @@ export const MoveBlueFileBody = zod.object({
 
 export const MoveBlueFileResponse = zod.object({
   "id": zod.string().uuid(),
-  "no": zod.number().int().nullable(),
   "wo": zod.string(),
-  "complete": zod.string().nullable(),
   "place": zod.string(),
-  "area": zod.string(),
-  "rack": zod.number().int(),
-  "position": zod.enum(['L', 'M', 'R']),
-  "slot": zod.number().int(),
-  "date_in": zod.string().nullable(),
-  "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
