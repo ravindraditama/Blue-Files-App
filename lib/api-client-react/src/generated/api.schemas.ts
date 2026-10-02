@@ -87,7 +87,7 @@ export interface BlueFileLocationInput {
 export interface BlueFileImportInput {
   /**
      * @minItems 1
-     * @maxItems 5000
+     * @maxItems 10000
      */
   records: BlueFileRecordInput[];
 }
