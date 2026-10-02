@@ -108,7 +108,7 @@ export const GetBlueFilesSummaryResponse = zod.object({
 
 
 
-export const importBlueFilesBodyRecordsMax = 5000;
+export const importBlueFilesBodyRecordsMax = 10000;
 
 
 

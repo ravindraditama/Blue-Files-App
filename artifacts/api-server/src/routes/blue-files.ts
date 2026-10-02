@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Response } from "express";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db, blueFileRecordsTable } from "@workspace/db";
 import {
   BlueFileRecordInput,
@@ -252,40 +252,57 @@ router.post("/blue-file-records/import", async (req, res): Promise<void> => {
 
   try {
     const result = await db.transaction(async (tx) => {
-      let inserted = 0;
-      let updated = 0;
+      const workOrders = records.map((record) => record.wo);
+      const places = records.map((record) => record.place);
+      const existingWorkOrders = await tx
+        .select({ id: blueFileRecordsTable.id, wo: blueFileRecordsTable.wo })
+        .from(blueFileRecordsTable)
+        .where(inArray(blueFileRecordsTable.wo, workOrders));
+      const existingPlaces = await tx
+        .select({ id: blueFileRecordsTable.id, wo: blueFileRecordsTable.wo, place: blueFileRecordsTable.place })
+        .from(blueFileRecordsTable)
+        .where(inArray(blueFileRecordsTable.place, places));
+      const existingByWo = new Map(existingWorkOrders.map((record) => [record.wo, record]));
+      const existingByPlace = new Map(existingPlaces.map((record) => [record.place, record]));
 
       for (const record of records) {
-        const [existing] = await tx
-          .select({ id: blueFileRecordsTable.id })
-          .from(blueFileRecordsTable)
-          .where(eq(blueFileRecordsTable.wo, record.wo))
-          .limit(1);
-        const [placeOwner] = await tx
-          .select({ id: blueFileRecordsTable.id })
-          .from(blueFileRecordsTable)
-          .where(eq(blueFileRecordsTable.place, record.place))
-          .limit(1);
-
+        const existing = existingByWo.get(record.wo);
+        const placeOwner = existingByPlace.get(record.place);
         if (placeOwner && placeOwner.id !== existing?.id) {
           throw new InputConflictError(
             `Storage place ${record.place} is assigned to another work order.`,
           );
         }
-
-        if (existing) {
-          await tx
-            .update(blueFileRecordsTable)
-            .set(record)
-            .where(eq(blueFileRecordsTable.id, existing.id));
-          updated += 1;
-        } else {
-          await tx.insert(blueFileRecordsTable).values(record);
-          inserted += 1;
-        }
       }
 
-      return { inserted, updated };
+      const batchSize = 500;
+      for (let index = 0; index < records.length; index += batchSize) {
+        const batch = records.slice(index, index + batchSize);
+        await tx
+          .insert(blueFileRecordsTable)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: blueFileRecordsTable.wo,
+            set: {
+              no: sql`excluded.no`,
+              complete: sql`excluded.complete`,
+              place: sql`excluded.place`,
+              area: sql`excluded.area`,
+              rack: sql`excluded.rack`,
+              position: sql`excluded.position`,
+              slot: sql`excluded.slot`,
+              dateIn: sql`excluded.date_in`,
+              timeIn: sql`excluded.time_in`,
+              pic: sql`excluded.pic`,
+              updatedAt: sql`now()`,
+            },
+          });
+      }
+
+      return {
+        inserted: records.length - existingByWo.size,
+        updated: existingByWo.size,
+      };
     });
 
     res.json(ImportBlueFilesResponse.parse(result));
