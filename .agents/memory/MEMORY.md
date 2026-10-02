@@ -1,0 +1,1 @@
+- [Scoped pnpm installs](pnpm-workspace-installs.md) — target artifact dependencies with a workspace filter when root installation is rejected.

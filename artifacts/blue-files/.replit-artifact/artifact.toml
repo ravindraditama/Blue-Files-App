@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Blue File Management"
+description = "A rack-location management app for tracking blue files by work order, area, rack, position, and slot. It includes searchable file records, a live rack map, manual editing, and Excel import."
+version = "1.0.0"
+id = "artifacts/blue-files"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21784
+
+[services.development]
+run = "pnpm --filter @workspace/blue-files run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/blue-files", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/blue-files/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21784"
+BASE_PATH = "/"
