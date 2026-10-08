@@ -26,10 +26,11 @@ type CanonicalBlueFileInput = {
   pic: string | null;
 };
 
-const CONTINUATION_AREAS = ["R", "S", "T", "U", "V", "W"] as const;
-const CONTINUATION_AREA_SET = new Set<string>(CONTINUATION_AREAS);
-const CONTINUATION_RACKS = 18;
-const CONTINUATION_SLOTS = 15;
+const ROW_AREAS = Array.from({ length: 23 }, (_, index) =>
+  String.fromCharCode(65 + index),
+);
+const ROW_RACKS = 18;
+const ROW_SLOTS = 18;
 
 class InputConflictError extends Error {}
 
@@ -49,13 +50,6 @@ function parsePlace(value: string) {
   if (!Number.isSafeInteger(rack) || rack < 1 || !Number.isSafeInteger(slot) || slot < 1) {
     return null;
   }
-  if (
-    CONTINUATION_AREA_SET.has(area) &&
-    (rack > CONTINUATION_RACKS || slot > CONTINUATION_SLOTS)
-  ) {
-    return null;
-  }
-
   return {
     area,
     rack,
@@ -130,14 +124,14 @@ router.get("/blue-file-records/summary", async (_req, res): Promise<void> => {
     { occupied: number; racks: Set<number>; maxRack: number; maxSlot: number }
   >();
 
-  for (const area of CONTINUATION_AREAS) {
+  for (const area of ROW_AREAS) {
     areaMap.set(area, {
       occupied: 0,
       racks: new Set(
-        Array.from({ length: CONTINUATION_RACKS }, (_, index) => index + 1),
+        Array.from({ length: ROW_RACKS }, (_, index) => index + 1),
       ),
-      maxRack: CONTINUATION_RACKS,
-      maxSlot: CONTINUATION_SLOTS,
+      maxRack: ROW_RACKS,
+      maxSlot: ROW_SLOTS,
     });
   }
 
@@ -165,9 +159,7 @@ router.get("/blue-file-records/summary", async (_req, res): Promise<void> => {
     racks: value.racks.size,
     max_rack: value.maxRack,
     max_slot: value.maxSlot,
-    capacity: CONTINUATION_AREA_SET.has(area)
-      ? CONTINUATION_RACKS * 3 * CONTINUATION_SLOTS
-      : value.maxRack * 3 * value.maxSlot,
+    capacity: value.maxRack * 3 * value.maxSlot,
   })).sort((a, b) => a.area.localeCompare(b.area));
   const occupied = records.length;
   const totalCapacity = areas.reduce((total, area) => total + area.capacity, 0);

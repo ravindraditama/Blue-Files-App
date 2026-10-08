@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetBlueFilesSummaryQueryKey,
@@ -26,7 +26,9 @@ type ToastState = { message: string; type: 'success' | 'error' } | null;
 type Place = { place: string; area: string; rack: number; position: 'L' | 'M' | 'R'; slot: number };
 
 const POSITIONS = ['L', 'M', 'R'] as const;
-const CONTINUATION_AREAS = new Set(['R', 'S', 'T', 'U', 'V', 'W']);
+const ROW_AREAS = Array.from({ length: 23 }, (_, index) => String.fromCharCode(65 + index));
+const ROW_RACKS = 18;
+const ROW_SLOTS = 18;
 
 function parsePlace(value: string): Place | null {
   const cleaned = value.trim().toUpperCase().replace(/\s+/g, '');
@@ -40,7 +42,6 @@ function parsePlace(value: string): Place | null {
   const rack = Number(match[2]);
   const slot = Number(match[4]);
   if (rack < 1 || slot < 1 || !Number.isSafeInteger(rack) || !Number.isSafeInteger(slot)) return null;
-  if (CONTINUATION_AREAS.has(area) && (rack > 18 || slot > 15)) return null;
   return {
     area,
     rack,
@@ -75,12 +76,28 @@ function App() {
   const importMutation = useImportBlueFiles();
   const records = recordsQuery.data ?? [];
   const summary = summaryQuery.data;
+  const availablePlaces = useMemo(() => {
+    const occupied = new Set(records.map((record) => record.place.toUpperCase()));
+    const available: string[] = [];
+    for (const area of ROW_AREAS) {
+      for (let rack = 1; rack <= ROW_RACKS; rack += 1) {
+        for (const position of POSITIONS) {
+          for (let slot = 1; slot <= ROW_SLOTS; slot += 1) {
+            const place = `${area}${String(rack).padStart(2, '0')}${position}-${String(slot).padStart(3, '0')}`;
+            if (!occupied.has(place)) available.push(place);
+          }
+        }
+      }
+    }
+    return available;
+  }, [records]);
 
   const [searchType, setSearchType] = useState<SearchType>('wo');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [openRack, setOpenRack] = useState<number | null>(null);
   const [highlightPlace, setHighlightPlace] = useState('');
+  const [placeMatches, setPlaceMatches] = useState<BlueFileRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<BlueFileRecord | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -136,43 +153,57 @@ function App() {
     setShowAdd(true);
   };
 
+  const focusRecord = (record: BlueFileRecord) => {
+    const location = parsePlace(record.place);
+    if (!location) return showToast(`Invalid saved location for ${record.wo}`, 'error');
+    setSelectedArea(location.area);
+    setOpenRack(location.rack);
+    setHighlightPlace(location.place);
+    setSelectedRecord(record);
+  };
+
   const handleSearch = () => {
     const query = searchQuery.trim();
     if (!query) {
       setHighlightPlace('');
+      setPlaceMatches([]);
       return;
     }
     if (searchType === 'wo') {
+      setPlaceMatches([]);
       const matches = records.filter((row) => row.wo.toUpperCase().includes(query.toUpperCase()));
       if (!matches.length) return showToast(`No records found for WO "${query}"`, 'error');
       const match = matches[0];
-      const location = parsePlace(match.place);
-      if (!location) return showToast(`Invalid saved location for ${match.wo}`, 'error');
-      setSelectedArea(location.area);
-      setOpenRack(location.rack);
-      setHighlightPlace(match.place);
-      setSelectedRecord(match);
+      focusRecord(match);
       showToast(matches.length > 1 ? `Found ${matches.length} work orders matching "${query}"` : `Found ${match.wo} at ${match.place}`);
     } else if (searchType === 'place') {
-      const place = parsePlace(query);
-      if (!place) return showToast('Invalid place format. Use a code such as A01R-001.', 'error');
-      const match = records.find((row) => row.place.toUpperCase() === place.place);
-      setSelectedArea(place.area);
-      setOpenRack(place.rack);
-      setHighlightPlace(place.place);
-      if (!match) return showToast(`${place.place} is empty`, 'error');
-      setSelectedRecord(match);
-      showToast(`Found ${match.wo} at ${place.place}`);
+      const keyword = query.toUpperCase().replace(/\s+/g, '');
+      const canonicalQuery = parsePlace(keyword)?.place;
+      const shortened = keyword.replace(/^([A-Z]+)0+(?=\d)/, '$1');
+      const matches = records.filter((record) => {
+        const canonicalPlace = record.place.toUpperCase();
+        const shortenedPlace = canonicalPlace.replace(/^([A-Z]+)0+(?=\d)/, '$1');
+        return canonicalPlace.includes(canonicalQuery ?? keyword) || shortenedPlace.includes(shortened);
+      });
+      if (!matches.length) {
+        setPlaceMatches([]);
+        return showToast(`No records found for Place "${query}"`, 'error');
+      }
+      setPlaceMatches(matches);
+      const firstLocation = parsePlace(matches[0].place);
+      if (firstLocation) {
+        setSelectedArea(firstLocation.area);
+        setOpenRack(firstLocation.rack);
+        setHighlightPlace(firstLocation.place);
+      }
+      setSelectedRecord(null);
+      showToast(`Found ${matches.length} record${matches.length === 1 ? '' : 's'} matching Place "${query}"`);
     } else {
+      setPlaceMatches([]);
       const matches = records.filter((row) => (row.pic ?? '').toUpperCase().includes(query.toUpperCase()));
       if (!matches.length) return showToast(`No records found for PIC "${query}"`, 'error');
       const match = matches[0];
-      const location = parsePlace(match.place);
-      if (!location) return showToast(`Invalid saved location for ${match.wo}`, 'error');
-      setSelectedArea(location.area);
-      setOpenRack(location.rack);
-      setHighlightPlace(match.place);
-      setSelectedRecord(match);
+      focusRecord(match);
       showToast(`Found ${matches.length} record${matches.length === 1 ? '' : 's'} for PIC "${query}"`);
     }
   };
@@ -252,7 +283,7 @@ function App() {
             {([
               ['wo', 'WO', FileText], ['place', 'Place', MapPin], ['pic', 'PIC', UserRound],
             ] as const).map(([type, label, Icon]) => (
-              <button key={type} data-testid={`button-search-type-${type}`} type="button" onClick={() => setSearchType(type)} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold transition ${searchType === type ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-slate-100'}`}>
+              <button key={type} data-testid={`button-search-type-${type}`} type="button" onClick={() => { setSearchType(type); setPlaceMatches([]); }} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold transition ${searchType === type ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-slate-100'}`}>
                 <Icon className="h-3.5 w-3.5" />{label}
               </button>
             ))}
@@ -260,7 +291,7 @@ function App() {
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input data-testid="input-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={searchType === 'wo' ? 'Search work order…' : searchType === 'place' ? 'Search storage place…' : 'Search person in charge…'} className="h-10 w-full rounded-lg border border-slate-700/80 bg-[#0c1420] pl-10 pr-10 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/15" />
-            {searchQuery && <button data-testid="button-clear-search" type="button" aria-label="Clear search" onClick={() => { setSearchQuery(''); setHighlightPlace(''); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200"><X className="h-4 w-4" /></button>}
+            {searchQuery && <button data-testid="button-clear-search" type="button" aria-label="Clear search" onClick={() => { setSearchQuery(''); setHighlightPlace(''); setPlaceMatches([]); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200"><X className="h-4 w-4" /></button>}
           </div>
           <button data-testid="button-search" type="submit" className="h-10 shrink-0 rounded-lg bg-sky-500 px-6 text-sm font-bold text-slate-950 transition hover:bg-sky-400">Search</button>
         </form>
@@ -268,6 +299,14 @@ function App() {
 
       <main className="mx-auto max-w-[1440px] px-4 pb-14 pt-6 sm:px-6 lg:px-8">
         {queryError && <div data-testid="status-query-error" className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/[.08] px-4 py-3 text-sm text-red-200"><span className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" />Inventory data could not be loaded. Check your connection and retry.</span><button data-testid="button-retry" onClick={() => { void recordsQuery.refetch(); void summaryQuery.refetch(); }} className="rounded-md bg-red-500/10 px-3 py-1.5 font-semibold hover:bg-red-500/20">Retry</button></div>}
+        {searchType === 'place' && placeMatches.length > 0 && <section aria-label="Place search results" data-testid="section-place-search-results" className="mb-5 rounded-xl border border-sky-500/20 bg-[#111a28] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-bold text-slate-100">{placeMatches.length} matching WO{placeMatches.length === 1 ? '' : 's'}</h2><span className="text-[11px] text-slate-500">Select a result to open its record</span></div>
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-800">
+            {placeMatches.map((record) => <button key={record.id} data-testid={`button-place-result-${record.id}`} type="button" onClick={() => focusRecord(record)} className="flex w-full items-center justify-between gap-4 border-b border-slate-800/80 bg-[#0d1521] px-3.5 py-2.5 text-left last:border-0 hover:bg-slate-800/70">
+              <span className="mono text-xs font-semibold text-sky-300">{record.place}</span><span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-100">WO {record.wo}</span><span className="hidden max-w-[35%] truncate text-[11px] text-slate-500 sm:block">{record.pic || '—'}</span>
+            </button>)}
+          </div>
+        </section>}
 
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
@@ -366,7 +405,7 @@ function App() {
         </footer>
       </main>
 
-      {showAdd && <RecordModal key="new-record" mode="add" defaultPlace={addPlace} records={records} onClose={() => setShowAdd(false)} onSave={async (input) => { const ok = await saveRecord(input); if (ok) setShowAdd(false); return ok; }} />}
+      {showAdd && <RecordModal key="new-record" mode="add" defaultPlace={addPlace} availablePlaces={availablePlaces} records={records} onClose={() => setShowAdd(false)} onSave={async (input) => { const ok = await saveRecord(input); if (ok) setShowAdd(false); return ok; }} />}
       {selectedRecord && <RecordModal key={selectedRecord.id} mode="detail" record={selectedRecord} records={records} onClose={() => setSelectedRecord(null)} onSave={async (input) => { const ok = await saveRecord(input, selectedRecord.id); if (ok) setSelectedRecord(null); return ok; }} onDelete={() => doDelete(selectedRecord.id)} onMove={(place) => doMove(selectedRecord, place)} />}
       {showImport && <ImportDialog records={records} pending={importMutation.isPending} onClose={() => setShowImport(false)} onImport={async (importRows) => {
         try {
@@ -413,11 +452,12 @@ function LoadingMap() {
   </section>;
 }
 
-function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave, onDelete, onMove }: {
+function RecordModal({ mode, record, records, defaultPlace = '', availablePlaces = [], onClose, onSave, onDelete, onMove }: {
   mode: 'add' | 'detail';
   record?: BlueFileRecord;
   records: BlueFileRecord[];
   defaultPlace?: string;
+  availablePlaces?: string[];
   onClose: () => void;
   onSave: (input: BlueFileRecordInput) => Promise<boolean>;
   onDelete?: () => Promise<boolean>;
@@ -427,9 +467,16 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     wo: record?.wo ?? '',
-    place: record?.place ?? defaultPlace,
+    place: record?.place ?? (defaultPlace || availablePlaces[0] || ''),
     pic: record?.pic ?? '',
   });
+  useEffect(() => {
+    if (mode !== 'add' || form.place || availablePlaces.length === 0) return;
+    const suggestedPlace = defaultPlace && availablePlaces.includes(defaultPlace)
+      ? defaultPlace
+      : availablePlaces[0];
+    setForm((current) => current.place ? current : { ...current, place: suggestedPlace });
+  }, [availablePlaces, defaultPlace, form.place, mode]);
   const parsed = parsePlace(form.place);
   const normalizedPlace = parsed?.place ?? '';
   const otherRecords = records.filter((row) => row.id !== record?.id);
@@ -469,7 +516,13 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
         {(view === 'edit') && <div className="space-y-4">
           {field('WO', 'wo', { required: true, placeholder: 'e.g. WO-2024-001' })}
           {duplicateWo && <p className="-mt-3 text-[11px] text-red-400">This work order already exists.</p>}
-          {field('Place', 'place', { required: true, mono: true, placeholder: 'e.g. A01R-001' })}
+          {mode === 'add' ? <label className="block min-w-0">
+            <span className="mb-1.5 block text-[11px] font-semibold text-slate-400">Available Place<span className="ml-1 text-red-400">*</span></span>
+            <select data-testid="input-record-place" value={form.place} disabled={availablePlaces.length === 0} onChange={(event) => setForm({ ...form, place: event.target.value })} className="mono h-10 w-full rounded-lg border border-slate-700 bg-[#0d1521] px-3 text-sm text-slate-100 outline-none focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/10 disabled:opacity-50">
+              {availablePlaces.length === 0 ? <option value="">No available places</option> : availablePlaces.map((place) => <option key={place} value={place}>{place}</option>)}
+            </select>
+            {availablePlaces.length > 0 && <span className="mt-1 block text-[10px] text-slate-500">Recommended: first available location</span>}
+          </label> : field('Place', 'place', { required: true, mono: true, placeholder: 'e.g. A01R-001' })}
           {form.place && !parsed && <p className="-mt-3 text-[11px] text-red-400">Invalid format. Use a place code such as A01R-001.</p>}
           {duplicatePlace && <p className="-mt-3 text-[11px] text-red-400">This place is already assigned.</p>}
           {parsed && <div className="-mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-500"><span className="rounded bg-slate-800 px-2 py-1">Area {parsed.area}</span><span className="rounded bg-slate-800 px-2 py-1">Rack {parsed.rack}</span><span className="rounded bg-slate-800 px-2 py-1">Position {parsed.position}</span><span className="rounded bg-slate-800 px-2 py-1">Slot {parsed.slot}</span></div>}
@@ -511,7 +564,7 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
   </div>;
 }
 
-function DetailItem({ icon: Icon, label, value, testId }: { icon: typeof Hash; label: string; value: string | number; testId: string }) {
+function DetailItem({ icon: Icon, label, value, testId }: { icon: typeof UserRound; label: string; value: string | number; testId: string }) {
   return <div className="flex min-w-0 items-center gap-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800/80 text-slate-500"><Icon className="h-3.5 w-3.5" /></span><span className="min-w-0"><span className="block text-[10px] text-slate-500">{label}</span><span data-testid={testId} className="mt-0.5 block truncate text-xs font-medium text-slate-200">{value}</span></span></div>;
 }
 
