@@ -97,7 +97,7 @@ function App() {
   const [selectedArea, setSelectedArea] = useState('');
   const [openRack, setOpenRack] = useState<number | null>(null);
   const [highlightPlace, setHighlightPlace] = useState('');
-  const [placeMatches, setPlaceMatches] = useState<BlueFileRecord[]>([]);
+  const [searchMatches, setSearchMatches] = useState<BlueFileRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<BlueFileRecord | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -153,7 +153,8 @@ function App() {
     setShowAdd(true);
   };
 
-  const focusRecord = (record: BlueFileRecord) => {
+  const focusRecord = (record: BlueFileRecord, keepSearchMatches = false) => {
+    if (!keepSearchMatches) setSearchMatches([]);
     const location = parsePlace(record.place);
     if (!location) return showToast(`Invalid saved location for ${record.wo}`, 'error');
     setSelectedArea(location.area);
@@ -166,15 +167,18 @@ function App() {
     const query = searchQuery.trim();
     if (!query) {
       setHighlightPlace('');
-      setPlaceMatches([]);
+      setSearchMatches([]);
       return;
     }
     if (searchType === 'wo') {
-      setPlaceMatches([]);
       const matches = records.filter((row) => row.wo.toUpperCase().includes(query.toUpperCase()));
-      if (!matches.length) return showToast(`No records found for WO "${query}"`, 'error');
+      if (!matches.length) {
+        setSearchMatches([]);
+        return showToast(`No records found for WO "${query}"`, 'error');
+      }
+      setSearchMatches(matches);
       const match = matches[0];
-      focusRecord(match);
+      focusRecord(match, true);
       showToast(matches.length > 1 ? `Found ${matches.length} work orders matching "${query}"` : `Found ${match.wo} at ${match.place}`);
     } else if (searchType === 'place') {
       const keyword = query.toUpperCase().replace(/\s+/g, '');
@@ -186,20 +190,15 @@ function App() {
         return canonicalPlace.includes(canonicalQuery ?? keyword) || shortenedPlace.includes(shortened);
       });
       if (!matches.length) {
-        setPlaceMatches([]);
+        setSearchMatches([]);
         return showToast(`No records found for Place "${query}"`, 'error');
       }
-      setPlaceMatches(matches);
-      const firstLocation = parsePlace(matches[0].place);
-      if (firstLocation) {
-        setSelectedArea(firstLocation.area);
-        setOpenRack(firstLocation.rack);
-        setHighlightPlace(firstLocation.place);
-      }
-      setSelectedRecord(null);
-      showToast(`Found ${matches.length} record${matches.length === 1 ? '' : 's'} matching Place "${query}"`);
+      setSearchMatches(matches);
+      const match = matches[0];
+      focusRecord(match, true);
+      showToast(matches.length > 1 ? `Found ${matches.length} work orders matching "${query}"` : `Found ${match.wo} at ${match.place}`);
     } else {
-      setPlaceMatches([]);
+      setSearchMatches([]);
       const matches = records.filter((row) => (row.pic ?? '').toUpperCase().includes(query.toUpperCase()));
       if (!matches.length) return showToast(`No records found for PIC "${query}"`, 'error');
       const match = matches[0];
@@ -226,6 +225,7 @@ function App() {
       await deleteMutation.mutateAsync({ id });
       await refresh();
       setSelectedRecord(null);
+      setSearchMatches([]);
       showToast('Record removed — slot is now empty');
       return true;
     } catch (error) {
@@ -239,6 +239,7 @@ function App() {
       await moveMutation.mutateAsync({ id: record.id, data: { place: place.place } });
       await refresh();
       setSelectedRecord(null);
+      setSearchMatches([]);
       setSelectedArea(place.area);
       setOpenRack(place.rack);
       setHighlightPlace(place.place);
@@ -283,7 +284,7 @@ function App() {
             {([
               ['wo', 'WO', FileText], ['place', 'Place', MapPin], ['pic', 'PIC', UserRound],
             ] as const).map(([type, label, Icon]) => (
-              <button key={type} data-testid={`button-search-type-${type}`} type="button" onClick={() => { setSearchType(type); setPlaceMatches([]); }} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold transition ${searchType === type ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-slate-100'}`}>
+              <button key={type} data-testid={`button-search-type-${type}`} type="button" onClick={() => { setSearchType(type); setSearchMatches([]); }} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold transition ${searchType === type ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-slate-100'}`}>
                 <Icon className="h-3.5 w-3.5" />{label}
               </button>
             ))}
@@ -291,7 +292,7 @@ function App() {
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input data-testid="input-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={searchType === 'wo' ? 'Search work order…' : searchType === 'place' ? 'Search storage place…' : 'Search person in charge…'} className="h-10 w-full rounded-lg border border-slate-700/80 bg-[#0c1420] pl-10 pr-10 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/15" />
-            {searchQuery && <button data-testid="button-clear-search" type="button" aria-label="Clear search" onClick={() => { setSearchQuery(''); setHighlightPlace(''); setPlaceMatches([]); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200"><X className="h-4 w-4" /></button>}
+            {searchQuery && <button data-testid="button-clear-search" type="button" aria-label="Clear search" onClick={() => { setSearchQuery(''); setHighlightPlace(''); setSearchMatches([]); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200"><X className="h-4 w-4" /></button>}
           </div>
           <button data-testid="button-search" type="submit" className="h-10 shrink-0 rounded-lg bg-sky-500 px-6 text-sm font-bold text-slate-950 transition hover:bg-sky-400">Search</button>
         </form>
@@ -299,15 +300,6 @@ function App() {
 
       <main className="mx-auto max-w-[1440px] px-4 pb-14 pt-6 sm:px-6 lg:px-8">
         {queryError && <div data-testid="status-query-error" className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/[.08] px-4 py-3 text-sm text-red-200"><span className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" />Inventory data could not be loaded. Check your connection and retry.</span><button data-testid="button-retry" onClick={() => { void recordsQuery.refetch(); void summaryQuery.refetch(); }} className="rounded-md bg-red-500/10 px-3 py-1.5 font-semibold hover:bg-red-500/20">Retry</button></div>}
-        {searchType === 'place' && placeMatches.length > 0 && <section aria-label="Place search results" data-testid="section-place-search-results" className="mb-5 rounded-xl border border-sky-500/20 bg-[#111a28] p-4">
-          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-bold text-slate-100">{placeMatches.length} matching WO{placeMatches.length === 1 ? '' : 's'}</h2><span className="text-[11px] text-slate-500">Select a result to open its record</span></div>
-          <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-800">
-            {placeMatches.map((record) => <button key={record.id} data-testid={`button-place-result-${record.id}`} type="button" onClick={() => focusRecord(record)} className="flex w-full items-center justify-between gap-4 border-b border-slate-800/80 bg-[#0d1521] px-3.5 py-2.5 text-left last:border-0 hover:bg-slate-800/70">
-              <span className="mono text-xs font-semibold text-sky-300">{record.place}</span><span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-100">WO {record.wo}</span><span className="hidden max-w-[35%] truncate text-[11px] text-slate-500 sm:block">{record.pic || '—'}</span>
-            </button>)}
-          </div>
-        </section>}
-
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
             <p className="mb-1 text-[10px] font-bold tracking-[.18em] text-sky-400">INVENTORY OVERVIEW</p>
@@ -388,7 +380,7 @@ function App() {
                             const slot = i + 1;
                             const record = rackRecords.get(`${openRack}-${position}-${slot}`);
                             const slotPlace = record?.place ?? `${selectedArea}${String(openRack).padStart(2, '0')}${position}-${String(slot).padStart(3, '0')}`;
-                            return <button key={slot} data-testid={`button-slot-${selectedArea}-${openRack}-${position}-${slot}`} title={record ? `${record.wo} · ${slotPlace}` : `Available · ${slotPlace}`} onClick={() => record ? setSelectedRecord(record) : openAdd(slotPlace)} className={`mono flex aspect-square min-w-0 items-center justify-center rounded-md text-[9px] font-medium transition hover:-translate-y-px ${record ? 'bg-red-500 text-white shadow-sm shadow-red-950/40 hover:bg-red-400' : 'bg-emerald-500/[.09] text-emerald-500/70 ring-1 ring-inset ring-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300'} ${highlightPlace === slotPlace ? 'z-10 outline outline-2 outline-sky-400 outline-offset-2' : ''}`}><span>{String(slot).padStart(3, '0')}</span></button>;
+                            return <button key={slot} data-testid={`button-slot-${selectedArea}-${openRack}-${position}-${slot}`} title={record ? `${record.wo} · ${slotPlace}` : `Available · ${slotPlace}`} onClick={() => record ? focusRecord(record) : openAdd(slotPlace)} className={`mono flex aspect-square min-w-0 items-center justify-center rounded-md text-[9px] font-medium transition hover:-translate-y-px ${record ? 'bg-red-500 text-white shadow-sm shadow-red-950/40 hover:bg-red-400' : 'bg-emerald-500/[.09] text-emerald-500/70 ring-1 ring-inset ring-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300'} ${highlightPlace === slotPlace ? 'z-10 outline outline-2 outline-sky-400 outline-offset-2' : ''}`}><span>{String(slot).padStart(3, '0')}</span></button>;
                           })}
                         </div>
                       </div>;
@@ -406,7 +398,7 @@ function App() {
       </main>
 
       {showAdd && <RecordModal key="new-record" mode="add" defaultPlace={addPlace} availablePlaces={availablePlaces} records={records} onClose={() => setShowAdd(false)} onSave={async (input) => { const ok = await saveRecord(input); if (ok) setShowAdd(false); return ok; }} />}
-      {selectedRecord && <RecordModal key={selectedRecord.id} mode="detail" record={selectedRecord} records={records} onClose={() => setSelectedRecord(null)} onSave={async (input) => { const ok = await saveRecord(input, selectedRecord.id); if (ok) setSelectedRecord(null); return ok; }} onDelete={() => doDelete(selectedRecord.id)} onMove={(place) => doMove(selectedRecord, place)} />}
+      {selectedRecord && <RecordModal key={selectedRecord.id} mode="detail" record={selectedRecord} records={records} searchMatches={searchMatches} onSelectMatch={(record) => focusRecord(record, true)} onClose={() => { setSelectedRecord(null); setSearchMatches([]); }} onSave={async (input) => { const ok = await saveRecord(input, selectedRecord.id); if (ok) { setSelectedRecord(null); setSearchMatches([]); } return ok; }} onDelete={() => doDelete(selectedRecord.id)} onMove={(place) => doMove(selectedRecord, place)} />}
       {showImport && <ImportDialog records={records} pending={importMutation.isPending} onClose={() => setShowImport(false)} onImport={async (importRows) => {
         try {
           const result = await importMutation.mutateAsync({ data: { records: importRows } });
@@ -452,12 +444,14 @@ function LoadingMap() {
   </section>;
 }
 
-function RecordModal({ mode, record, records, defaultPlace = '', availablePlaces = [], onClose, onSave, onDelete, onMove }: {
+function RecordModal({ mode, record, records, defaultPlace = '', availablePlaces = [], searchMatches = [], onSelectMatch, onClose, onSave, onDelete, onMove }: {
   mode: 'add' | 'detail';
   record?: BlueFileRecord;
   records: BlueFileRecord[];
   defaultPlace?: string;
   availablePlaces?: string[];
+  searchMatches?: BlueFileRecord[];
+  onSelectMatch?: (record: BlueFileRecord) => void;
   onClose: () => void;
   onSave: (input: BlueFileRecordInput) => Promise<boolean>;
   onDelete?: () => Promise<boolean>;
@@ -533,6 +527,14 @@ function RecordModal({ mode, record, records, defaultPlace = '', availablePlaces
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <DetailItem icon={UserRound} label="PIC" value={record.pic || '—'} testId="text-record-pic" />
           </div>
+          {searchMatches.length > 1 && <section data-testid="section-search-matches" aria-label="Matching work orders" className="overflow-hidden rounded-xl border border-slate-800 bg-[#0d1521]">
+            <div className="flex items-center justify-between border-b border-slate-800 px-3.5 py-2.5"><h3 className="text-[11px] font-bold text-slate-200">Matching work orders</h3><span className="text-[10px] text-slate-500">{searchMatches.length} results</span></div>
+            <div className="max-h-44 overflow-y-auto">
+              {searchMatches.map((match) => <button key={match.id} data-testid={`button-search-result-${match.id}`} type="button" aria-current={match.id === record.id ? 'true' : undefined} onClick={() => onSelectMatch?.(match)} className={`flex w-full items-center justify-between gap-3 border-b border-slate-800/70 px-3.5 py-2.5 text-left last:border-0 ${match.id === record.id ? 'bg-sky-500/10' : 'hover:bg-slate-800/70'}`}>
+                <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-100">WO {match.wo}</span><span className="mono text-[11px] text-sky-300">{match.place}</span>
+              </button>)}
+            </div>
+          </section>}
         </div>}
         {view === 'move' && record && <div className="space-y-4">
           <div className="rounded-xl border border-slate-800 bg-[#0d1521] p-3"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500">Current location</p><p className="mono mt-1 text-sm text-sky-300">{record.place}</p></div>
