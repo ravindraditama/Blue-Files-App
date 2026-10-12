@@ -1,34 +1,36 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
   check,
   index,
-  integer,
-  pgTable,
-  text,
+  int,
+  mysqlTable,
   timestamp,
   uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+  varchar,
+} from "drizzle-orm/mysql-core";
 
-export const blueFileRecordsTable = pgTable(
+export const blueFileRecordsTable = mysqlTable(
   "blue_file_records",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    no: integer("no"),
-    wo: text("wo").notNull(),
-    complete: text("complete"),
-    place: text("place").notNull(),
-    area: text("area").notNull(),
-    rack: integer("rack").notNull(),
-    position: text("position").notNull(),
-    slot: integer("slot").notNull(),
-    dateIn: text("date_in"),
-    timeIn: text("time_in"),
-    pic: text("pic"),
-    createdAt: timestamp("created_at", { withTimezone: true })
+    id: varchar("id", { length: 36 })
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    no: int("no"),
+    wo: varchar("wo", { length: 255 }).notNull(),
+    complete: varchar("complete", { length: 255 }),
+    place: varchar("place", { length: 32 }).notNull(),
+    area: varchar("area", { length: 16 }).notNull(),
+    rack: int("rack").notNull(),
+    position: varchar("position", { length: 1 }).notNull(),
+    slot: int("slot").notNull(),
+    dateIn: varchar("date_in", { length: 64 }),
+    timeIn: varchar("time_in", { length: 64 }),
+    pic: varchar("pic", { length: 255 }),
+    createdAt: timestamp("created_at", { mode: "date" })
       .notNull()
       .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
+    updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
@@ -43,7 +45,7 @@ export const blueFileRecordsTable = pgTable(
       table.position,
       table.slot,
     ),
-    check("blue_file_records_area_check", sql`${table.area} ~ '^[A-Z]+$'`),
+    check("blue_file_records_area_check", sql`regexp_like(${table.area}, '^[A-Z]+$', 'c')`),
     check("blue_file_records_rack_check", sql`${table.rack} > 0`),
     check(
       "blue_file_records_position_check",

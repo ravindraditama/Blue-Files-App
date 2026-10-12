@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Response } from "express";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db, blueFileRecordsTable } from "@workspace/db";
@@ -110,13 +111,20 @@ function serializeRecord(record: typeof blueFileRecordsTable.$inferSelect) {
   };
 }
 
+// drizzle wraps driver errors in DrizzleQueryError (original on .cause)
 function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
+  if (typeof error !== "object" || error === null) return false;
+  if ("code" in error && error.code === "ER_DUP_ENTRY") return true;
+  return "cause" in error && isUniqueViolation(error.cause);
+}
+
+// MySQL has no RETURNING; re-select the row after a write.
+async function findRecord(id: string) {
+  const [row] = await db
+    .select()
+    .from(blueFileRecordsTable)
+    .where(eq(blueFileRecordsTable.id, id));
+  return row;
 }
 
 function errorBody(message: string) {
@@ -207,10 +215,9 @@ router.post("/blue-file-records", async (req, res): Promise<void> => {
   }
 
   try {
-    const [created] = await db
-      .insert(blueFileRecordsTable)
-      .values(input)
-      .returning();
+    const id = randomUUID();
+    await db.insert(blueFileRecordsTable).values({ id, ...input });
+    const created = (await findRecord(id))!;
     res.status(201).json(CreateBlueFileResponse.parse(serializeRecord(created)));
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -281,19 +288,18 @@ router.post("/blue-file-records/import", async (req, res): Promise<void> => {
         await tx
           .insert(blueFileRecordsTable)
           .values(batch)
-          .onConflictDoUpdate({
-            target: blueFileRecordsTable.wo,
+          .onDuplicateKeyUpdate({
             set: {
-              no: sql`excluded.no`,
-              complete: sql`excluded.complete`,
-              place: sql`excluded.place`,
-              area: sql`excluded.area`,
-              rack: sql`excluded.rack`,
-              position: sql`excluded.position`,
-              slot: sql`excluded.slot`,
-              dateIn: sql`excluded.date_in`,
-              timeIn: sql`excluded.time_in`,
-              pic: sql`excluded.pic`,
+              no: sql`values(${blueFileRecordsTable.no})`,
+              complete: sql`values(${blueFileRecordsTable.complete})`,
+              place: sql`values(${blueFileRecordsTable.place})`,
+              area: sql`values(${blueFileRecordsTable.area})`,
+              rack: sql`values(${blueFileRecordsTable.rack})`,
+              position: sql`values(${blueFileRecordsTable.position})`,
+              slot: sql`values(${blueFileRecordsTable.slot})`,
+              dateIn: sql`values(${blueFileRecordsTable.dateIn})`,
+              timeIn: sql`values(${blueFileRecordsTable.timeIn})`,
+              pic: sql`values(${blueFileRecordsTable.pic})`,
               updatedAt: sql`now()`,
             },
           });
@@ -342,11 +348,11 @@ router.patch("/blue-file-records/:id", async (req, res): Promise<void> => {
   }
 
   try {
-    const [updated] = await db
+    await db
       .update(blueFileRecordsTable)
       .set(input)
-      .where(eq(blueFileRecordsTable.id, params.data.id))
-      .returning();
+      .where(eq(blueFileRecordsTable.id, params.data.id));
+    const updated = await findRecord(params.data.id);
     if (!updated) {
       res.status(404).json(errorBody("Record not found."));
       return;
@@ -379,7 +385,7 @@ router.patch("/blue-file-records/:id/move", async (req, res): Promise<void> => {
   }
 
   try {
-    const [updated] = await db
+    await db
       .update(blueFileRecordsTable)
       .set({
         place: location.place,
@@ -388,8 +394,8 @@ router.patch("/blue-file-records/:id/move", async (req, res): Promise<void> => {
         position: location.position,
         slot: location.slot,
       })
-      .where(eq(blueFileRecordsTable.id, params.data.id))
-      .returning();
+      .where(eq(blueFileRecordsTable.id, params.data.id));
+    const updated = await findRecord(params.data.id);
     if (!updated) {
       res.status(404).json(errorBody("Record not found."));
       return;
@@ -412,9 +418,8 @@ router.delete("/blue-file-records/:id", async (req, res): Promise<void> => {
   }
   const [deleted] = await db
     .delete(blueFileRecordsTable)
-    .where(eq(blueFileRecordsTable.id, params.data.id))
-    .returning({ id: blueFileRecordsTable.id });
-  if (!deleted) {
+    .where(eq(blueFileRecordsTable.id, params.data.id));
+  if (deleted.affectedRows === 0) {
     res.status(404).json(errorBody("Record not found."));
     return;
   }
