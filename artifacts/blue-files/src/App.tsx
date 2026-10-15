@@ -366,7 +366,7 @@ function BlueFiles({ admin, onLogout }: { admin: boolean; onLogout: () => void }
       </main>
 
       {showAdd && <RecordModal key="new-record" mode="add" defaultPlace={addPlace} records={records} onClose={() => setShowAdd(false)} onSave={async (input) => { const ok = await saveRecord(input); if (ok) setShowAdd(false); return ok; }} />}
-      {selectedRecord && <RecordModal key={selectedRecord.id} mode="detail" record={selectedRecord} records={records} onClose={() => setSelectedRecord(null)} onSave={async (input) => { const ok = await saveRecord(input, selectedRecord.id); if (ok) setSelectedRecord(null); return ok; }} onDelete={() => doDelete(selectedRecord.id)} onMove={(place) => doMove(selectedRecord, place)} />}
+      {selectedRecord && <RecordModal key={selectedRecord.id} mode="detail" readOnly={!admin} record={selectedRecord} records={records} onClose={() => setSelectedRecord(null)} onSave={async (input) => { const ok = await saveRecord(input, selectedRecord.id); if (ok) setSelectedRecord(null); return ok; }} onDelete={() => doDelete(selectedRecord.id)} onMove={(place) => doMove(selectedRecord, place)} />}
       {showImport && <ImportDialog records={records} pending={importMutation.isPending} onClose={() => setShowImport(false)} onImport={async (importRows) => {
         try {
           const result = await importMutation.mutateAsync({ data: { records: importRows } });
@@ -412,8 +412,9 @@ function LoadingMap() {
   </section>;
 }
 
-function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave, onDelete, onMove }: {
+function RecordModal({ mode, record, records, defaultPlace = '', readOnly = false, onClose, onSave, onDelete, onMove }: {
   mode: 'add' | 'detail';
+  readOnly?: boolean; // non-admin: view only, no Remove / Move / Edit
   record?: BlueFileRecord;
   records: BlueFileRecord[];
   defaultPlace?: string;
@@ -503,13 +504,13 @@ function RecordModal({ mode, record, records, defaultPlace = '', onClose, onSave
         </div>}
       </div>
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 bg-[#101926] px-5 py-4 sm:px-6">
-        {mode === 'detail' && view === 'view' ? <div className="flex items-center gap-1.5">
+        {mode === 'detail' && view === 'view' && !readOnly ? <div className="flex items-center gap-1.5">
           <button data-testid="button-delete-record" onClick={() => setView('delete')} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-red-300 transition hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" />Remove</button>
           <button data-testid="button-move-record" onClick={() => { setForm({ ...form, place: '' }); setView('move'); }} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/10"><Move className="h-3.5 w-3.5" />Move</button>
         </div> : <span />}
         <div className="ml-auto flex items-center gap-2">
           {(view !== 'view' || mode === 'add') && <button data-testid="button-cancel-record" onClick={() => mode === 'add' ? onClose() : setView('view')} className="h-9 rounded-lg border border-slate-700 px-4 text-xs font-semibold text-slate-300 hover:bg-slate-800">Cancel</button>}
-          {view === 'view' && mode === 'detail' && <button data-testid="button-edit-record" onClick={() => setView('edit')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-sky-500 px-4 text-xs font-bold text-slate-950 hover:bg-sky-400"><FileText className="h-3.5 w-3.5" />Edit record</button>}
+          {view === 'view' && mode === 'detail' && !readOnly && <button data-testid="button-edit-record" onClick={() => setView('edit')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-sky-500 px-4 text-xs font-bold text-slate-950 hover:bg-sky-400"><FileText className="h-3.5 w-3.5" />Edit record</button>}
           {view === 'edit' && <button data-testid="button-save-record" disabled={!canSave || saving} onClick={() => void submitSave()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-sky-500 px-4 text-xs font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-45">{saving ? 'Saving…' : <><Check className="h-3.5 w-3.5" />{mode === 'add' ? 'Add File' : 'Save Changes'}</>}</button>}
           {view === 'move' && <button data-testid="button-confirm-move" disabled={!parsed || duplicatePlace || saving} onClick={async () => { if (!parsed || !onMove) return; setSaving(true); const ok = await onMove(parsed); setSaving(false); if (ok) setView('view'); }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-sky-500 px-4 text-xs font-bold text-slate-950 hover:bg-sky-400 disabled:opacity-45">{saving ? 'Moving…' : <><Move className="h-3.5 w-3.5" />Move File</>}</button>}
           {view === 'delete' && <button data-testid="button-confirm-delete" disabled={saving} onClick={async () => { if (!onDelete) return; setSaving(true); await onDelete(); setSaving(false); }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-red-500 px-4 text-xs font-bold text-white hover:bg-red-400 disabled:opacity-50">{saving ? 'Removing…' : <><Trash2 className="h-3.5 w-3.5" />Remove File</>}</button>}

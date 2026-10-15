@@ -331,7 +331,7 @@ router.post("/blue-file-records/import", requireAdmin, async (req, res): Promise
   }
 });
 
-router.patch("/blue-file-records/:id", async (req, res): Promise<void> => {
+router.patch("/blue-file-records/:id", requireAdmin, async (req, res): Promise<void> => {
   const params = UpdateBlueFileParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json(errorBody(params.error.message));
@@ -373,7 +373,7 @@ router.patch("/blue-file-records/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.patch("/blue-file-records/:id/move", async (req, res): Promise<void> => {
+router.patch("/blue-file-records/:id/move", requireAdmin, async (req, res): Promise<void> => {
   const params = MoveBlueFileParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json(errorBody(params.error.message));
@@ -416,7 +416,7 @@ router.patch("/blue-file-records/:id/move", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/blue-file-records/:id", async (req, res): Promise<void> => {
+router.delete("/blue-file-records/:id", requireAdmin, async (req, res): Promise<void> => {
   const params = DeleteBlueFileParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json(errorBody(params.error.message));
