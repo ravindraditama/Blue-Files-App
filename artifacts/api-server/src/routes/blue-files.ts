@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Response } from "express";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db, blueFileRecordsTable } from "@workspace/db";
+import { requireAdmin } from "../middlewares/admin";
 import {
   BlueFileRecordInput,
   CreateBlueFileBody,
@@ -197,7 +198,12 @@ router.get("/blue-file-records/summary", async (_req, res): Promise<void> => {
   );
 });
 
-router.post("/blue-file-records", async (req, res): Promise<void> => {
+// Admin login check for the /admin screen (requireAdmin does the work).
+router.post("/admin/verify", requireAdmin, (_req, res): void => {
+  res.json({ ok: true });
+});
+
+router.post("/blue-file-records", requireAdmin, async (req, res): Promise<void> => {
   const parsed = CreateBlueFileBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json(errorBody(parsed.error.message));
@@ -228,7 +234,7 @@ router.post("/blue-file-records", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/blue-file-records/import", async (req, res): Promise<void> => {
+router.post("/blue-file-records/import", requireAdmin, async (req, res): Promise<void> => {
   const parsed = ImportBlueFilesBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json(errorBody(parsed.error.message));

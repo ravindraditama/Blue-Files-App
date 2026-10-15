@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetBlueFilesSummaryQueryKey,
@@ -12,8 +12,10 @@ import {
   useUpdateBlueFile,
   type BlueFileRecord,
   type BlueFileRecordInput,
+  setAuthTokenGetter,
 } from '@workspace/api-client-react';
 import * as XLSX from 'xlsx';
+import { AdminLogin, IS_ADMIN_PATH, readStoredPassword, storePassword, verifyAdmin } from './admin';
 import {
   AlertCircle, AlertTriangle, ArrowDownToLine, CalendarDays, Check,
   CheckCircle2, ChevronDown, ChevronRight, Clock3, FileSpreadsheet, FileText,
@@ -69,7 +71,7 @@ function placeInput(input: {
   };
 }
 
-function App() {
+function BlueFiles({ admin, onLogout }: { admin: boolean; onLogout: () => void }) {
   const queryClient = useQueryClient();
   const recordsQuery = useListBlueFiles();
   const summaryQuery = useGetBlueFilesSummary();
@@ -129,6 +131,7 @@ function App() {
   }, [areaRows]);
 
   const openAdd = (place = '') => {
+    if (!admin) return;
     setAddPlace(place);
     setShowAdd(true);
   };
@@ -229,12 +232,15 @@ function App() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {admin && <>
             <button data-testid="button-import" onClick={() => setShowImport(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-800/80 px-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-700">
               <UploadCloud className="h-4 w-4" /><span className="hidden sm:inline">Import Excel</span><span className="sm:hidden">Import</span>
             </button>
             <button data-testid="button-add-file" onClick={() => openAdd()} className="inline-flex h-10 items-center gap-2 rounded-lg bg-sky-500 px-3.5 text-sm font-bold text-slate-950 transition hover:bg-sky-400 sm:px-4">
               <Plus className="h-4 w-4" /><span className="hidden sm:inline">Add File</span><span className="sm:hidden">Add</span>
             </button>
+            <button data-testid="button-admin-logout" onClick={onLogout} className="inline-flex h-10 items-center rounded-lg border border-slate-700/80 px-3 text-sm font-semibold text-slate-400 transition hover:bg-slate-800">Log out</button>
+            </>}
           </div>
         </div>
       </header>
@@ -275,11 +281,11 @@ function App() {
           <div className="mt-7 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-6 py-14 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/70"><FileSpreadsheet className="h-6 w-6 text-slate-400" /></div>
             <h3 className="mt-4 text-lg font-bold text-slate-200">No blue file records yet</h3>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Add a file manually or import your existing spreadsheet to start mapping storage locations.</p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">{admin ? 'Add a file manually or import your existing spreadsheet to start mapping storage locations.' : 'Records will appear here once an administrator adds them.'}</p>
+            {admin && <div className="mt-5 flex flex-wrap justify-center gap-2">
               <button data-testid="button-empty-import" onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-700"><FileSpreadsheet className="h-4 w-4" />Import Excel</button>
               <button data-testid="button-empty-add" onClick={() => openAdd()} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-sky-400"><Plus className="h-4 w-4" />Add File Manually</button>
-            </div>
+            </div>}
           </div>
         ) : (
           <section className="mt-7 rounded-2xl border border-slate-800 bg-[#111a28] p-4 shadow-sm sm:p-5">
@@ -643,6 +649,34 @@ function InvalidRows({ rows }: { rows: string[] }) {
     <summary data-testid="button-invalid-rows" className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-[11px] font-semibold text-amber-200"><AlertTriangle className="h-3.5 w-3.5 text-amber-400" />{rows.length} invalid or duplicate row{rows.length === 1 ? '' : 's'} skipped<ChevronDown className="ml-auto h-3.5 w-3.5 text-amber-500/70" /></summary>
     <ul className="max-h-36 space-y-1 overflow-y-auto border-t border-amber-500/10 px-4 py-2.5 text-[10px] leading-4 text-amber-100/60">{rows.map((row, index) => <li key={`${row}-${index}`} data-testid={`text-invalid-row-${index}`}>{row}</li>)}</ul>
   </details>;
+}
+
+function App() {
+  const [admin, setAdmin] = useState(false);
+  const [booting, setBooting] = useState(IS_ADMIN_PATH);
+
+  const signIn = async (password: string) => {
+    if (!(await verifyAdmin(password))) return false;
+    setAuthTokenGetter(() => password);
+    storePassword(password);
+    setAdmin(true);
+    return true;
+  };
+  const signOut = () => {
+    setAuthTokenGetter(null);
+    storePassword(null);
+    setAdmin(false);
+  };
+
+  // Keep the admin session across a reload (sessionStorage, cleared when the tab closes).
+  useEffect(() => {
+    const stored = IS_ADMIN_PATH ? readStoredPassword() : null;
+    if (!stored) { setBooting(false); return; }
+    signIn(stored).catch(() => false).then((ok) => { if (!ok) signOut(); setBooting(false); });
+  }, []);
+
+  if (IS_ADMIN_PATH && !admin) return booting ? null : <AdminLogin onSubmit={signIn} />;
+  return <BlueFiles admin={admin} onLogout={signOut} />;
 }
 
 export default App;
