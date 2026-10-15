@@ -15,7 +15,7 @@ import {
   setAuthTokenGetter,
 } from '@workspace/api-client-react';
 import * as XLSX from 'xlsx';
-import { AdminLogin, IS_ADMIN_PATH, readStoredPassword, storePassword, verifyAdmin } from './admin';
+import { AdminLogin, IS_ADMIN_PATH, NotAvailable, isPublicViewOpen, readStoredPassword, storePassword, verifyAdmin } from './admin';
 import {
   AlertCircle, AlertTriangle, ArrowDownToLine, CalendarDays, Check,
   CheckCircle2, ChevronDown, ChevronRight, Clock3, FileSpreadsheet, FileText,
@@ -655,6 +655,7 @@ function InvalidRows({ rows }: { rows: string[] }) {
 function App() {
   const [admin, setAdmin] = useState(false);
   const [booting, setBooting] = useState(IS_ADMIN_PATH);
+  const [publicView, setPublicView] = useState<boolean | null>(IS_ADMIN_PATH ? false : null); // null = checking
 
   const signIn = async (password: string) => {
     if (!(await verifyAdmin(password))) return false;
@@ -676,7 +677,15 @@ function App() {
     signIn(stored).catch(() => false).then((ok) => { if (!ok) signOut(); setBooting(false); });
   }, []);
 
+  useEffect(() => {
+    if (!IS_ADMIN_PATH) void isPublicViewOpen().then(setPublicView);
+  }, []);
+
   if (IS_ADMIN_PATH && !admin) return booting ? null : <AdminLogin onSubmit={signIn} />;
+  if (!IS_ADMIN_PATH) {
+    if (publicView === null) return null;
+    if (!publicView) return <NotAvailable />;
+  }
   return <BlueFiles admin={admin} onLogout={signOut} />;
 }
 

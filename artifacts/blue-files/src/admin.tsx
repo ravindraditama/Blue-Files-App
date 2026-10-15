@@ -73,8 +73,28 @@ export function AdminLogin({ onSubmit }: { onSubmit: (password: string) => Promi
         >
           {busy ? 'Checking...' : 'Sign in'}
         </button>
-        <a href={import.meta.env.BASE_URL} className="mt-4 block text-center text-xs text-slate-500 hover:text-slate-300">Back to storage view</a>
       </form>
+    </div>
+  );
+}
+
+// Public viewing is switched by the server (PUBLIC_VIEW). Probe it so the page and the API can't disagree.
+export async function isPublicViewOpen(): Promise<boolean> {
+  try {
+    const response = await fetch(`${import.meta.env.BASE_URL}api/blue-file-records/summary`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export function NotAvailable() {
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 text-foreground">
+      <div data-testid="notice-not-available" className="w-full max-w-sm rounded-2xl border border-slate-800 bg-[#0e1723] p-6 text-center shadow-2xl">
+        <h1 className="text-lg font-bold text-slate-100">Blue File Management</h1>
+        <p className="mt-3 text-sm text-slate-400">This page is not available yet.</p>
+      </div>
     </div>
   );
 }

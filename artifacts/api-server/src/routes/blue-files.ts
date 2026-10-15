@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Response } from "express";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db, blueFileRecordsTable } from "@workspace/db";
-import { requireAdmin } from "../middlewares/admin";
+import { readAccess, requireAdmin } from "../middlewares/admin";
 import {
   BlueFileRecordInput,
   CreateBlueFileBody,
@@ -136,7 +136,7 @@ function sendConflict(res: Response, message: string) {
   res.status(409).json(errorBody(message));
 }
 
-router.get("/blue-file-records", async (_req, res): Promise<void> => {
+router.get("/blue-file-records", readAccess, async (_req, res): Promise<void> => {
   const records = await db
     .select()
     .from(blueFileRecordsTable)
@@ -149,7 +149,7 @@ router.get("/blue-file-records", async (_req, res): Promise<void> => {
   res.json(ListBlueFilesResponse.parse(records.map(serializeRecord)));
 });
 
-router.get("/blue-file-records/summary", async (_req, res): Promise<void> => {
+router.get("/blue-file-records/summary", readAccess, async (_req, res): Promise<void> => {
   const records = await db
     .select({
       area: blueFileRecordsTable.area,
