@@ -1,20 +1,30 @@
 import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Response } from "express";
-import { asc, eq, inArray, sql } from "drizzle-orm";
-import { db, blueFileRecordsTable } from "@workspace/db";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { db, blueFileRecordsTable, blueFileLoansTable } from "@workspace/db";
 import { readAccess, requireAdmin } from "../middlewares/admin";
 import {
   BlueFileRecordInput,
+  BorrowBlueFileBody,
+  BorrowBlueFileParams,
+  BorrowBlueFileResponse,
   CreateBlueFileBody,
   CreateBlueFileResponse,
   DeleteBlueFileParams,
   GetBlueFilesSummaryResponse,
   ImportBlueFilesBody,
   ImportBlueFilesResponse,
+  ListBlueFileLoansResponse,
   ListBlueFilesResponse,
   MoveBlueFileBody,
   MoveBlueFileParams,
   MoveBlueFileResponse,
+  ReturnBlueFileBody,
+  ReturnBlueFileParams,
+  ReturnBlueFileResponse,
+  SetBlueFileStatusBody,
+  SetBlueFileStatusParams,
+  SetBlueFileStatusResponse,
   UpdateBlueFileBody,
   UpdateBlueFileParams,
   UpdateBlueFileResponse,
@@ -55,7 +65,7 @@ function parsePlace(value: string) {
     rack,
     position,
     slot,
-    place: `${area}${rack}${position}-${String(slot).padStart(3, "0")}`,
+    place: `${area}${String(rack).padStart(2, "0")}${position}-${String(slot).padStart(3, "0")}`,
   };
 }
 
@@ -93,7 +103,19 @@ function canonicalizeInput(
   };
 }
 
-function serializeRecord(record: typeof blueFileRecordsTable.$inferSelect) {
+type RecordRow = typeof blueFileRecordsTable.$inferSelect;
+type LoanRow = typeof blueFileLoansTable.$inferSelect;
+
+function currentLocation(record: RecordRow, loan?: LoanRow): string {
+  if (record.status === "in_transit") return "Transit Area";
+  if (record.status === "borrowed") {
+    return `Borrowed by ${loan?.borrowerName ?? "unknown borrower"}`;
+  }
+  return `Rack ${record.place}`;
+}
+
+function serializeRecord(record: RecordRow, loan?: LoanRow) {
+  const openLoan = record.status === "borrowed" ? loan : undefined;
   return {
     id: record.id,
     no: record.no,
@@ -107,9 +129,67 @@ function serializeRecord(record: typeof blueFileRecordsTable.$inferSelect) {
     date_in: record.dateIn,
     time_in: record.timeIn,
     pic: record.pic,
+    status: record.status as "available" | "borrowed" | "in_transit",
+    current_location: currentLocation(record, openLoan),
+    borrower_name: openLoan?.borrowerName ?? null,
+    borrowed_at: openLoan?.borrowedAt ?? null,
+    borrow_remarks: openLoan?.borrowRemarks ?? null,
     created_at: record.createdAt.toISOString(),
     updated_at: record.updatedAt.toISOString(),
   };
+}
+
+async function findOpenLoan(recordId: string): Promise<LoanRow | undefined> {
+  const [loan] = await db
+    .select()
+    .from(blueFileLoansTable)
+    .where(
+      and(
+        eq(blueFileLoansTable.recordId, recordId),
+        isNull(blueFileLoansTable.returnedAt),
+      ),
+    );
+  return loan;
+}
+
+/** Serialize a single record, loading its open loan when it is borrowed. */
+async function serializeWithLoan(record: RecordRow) {
+  const loan =
+    record.status === "borrowed" ? await findOpenLoan(record.id) : undefined;
+  return serializeRecord(record, loan);
+}
+
+function serializeLoan(loan: LoanRow, now = new Date()) {
+  const end = loan.returnedAt ?? now;
+  const minutes = Math.max(
+    0,
+    Math.floor((end.getTime() - loan.borrowedAt.getTime()) / 60000),
+  );
+  return {
+    id: loan.id,
+    record_id: loan.recordId,
+    no: loan.no,
+    wo: loan.wo,
+    place: loan.place,
+    borrower_name: loan.borrowerName,
+    borrowed_at: loan.borrowedAt.toISOString(),
+    borrow_remarks: loan.borrowRemarks,
+    returned_at: loan.returnedAt ? loan.returnedAt.toISOString() : null,
+    returned_to: loan.returnedTo as "available" | "in_transit" | null,
+    return_remarks: loan.returnRemarks,
+    duration_minutes: minutes,
+    is_active: loan.returnedAt === null,
+  };
+}
+
+/** Parses an optional ISO timestamp. Returns null when invalid or in the future. */
+function resolveTimestamp(value: Date | string | null | undefined): Date | null {
+  if (value === null || value === undefined || value === "") return new Date();
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  // Allow a few minutes of clock skew between browser and server.
+  if (date.getTime() > Date.now() + 5 * 60 * 1000) return null;
+  return date;
 }
 
 // drizzle wraps driver errors in DrizzleQueryError (original on .cause)
@@ -146,7 +226,19 @@ router.get("/blue-file-records", readAccess, async (_req, res): Promise<void> =>
       asc(blueFileRecordsTable.position),
       asc(blueFileRecordsTable.slot),
     );
-  res.json(ListBlueFilesResponse.parse(records.map(serializeRecord)));
+  const openLoans = await db
+    .select()
+    .from(blueFileLoansTable)
+    .where(isNull(blueFileLoansTable.returnedAt));
+  const loanByRecord = new Map<string, LoanRow>();
+  for (const loan of openLoans) {
+    if (loan.recordId) loanByRecord.set(loan.recordId, loan);
+  }
+  res.json(
+    ListBlueFilesResponse.parse(
+      records.map((record) => serializeRecord(record, loanByRecord.get(record.id))),
+    ),
+  );
 });
 
 router.get("/blue-file-records/summary", readAccess, async (_req, res): Promise<void> => {
@@ -155,8 +247,11 @@ router.get("/blue-file-records/summary", readAccess, async (_req, res): Promise<
       area: blueFileRecordsTable.area,
       rack: blueFileRecordsTable.rack,
       slot: blueFileRecordsTable.slot,
+      status: blueFileRecordsTable.status,
     })
     .from(blueFileRecordsTable);
+  const borrowedFiles = records.filter((r) => r.status === "borrowed").length;
+  const inTransitFiles = records.filter((r) => r.status === "in_transit").length;
   const areaMap = new Map<
     string,
     { occupied: number; racks: Set<number>; maxRack: number; maxSlot: number }
@@ -193,6 +288,10 @@ router.get("/blue-file-records/summary", readAccess, async (_req, res): Promise<
       occupied,
       empty: Math.max(0, totalCapacity - occupied),
       utilization: totalCapacity > 0 ? (occupied / totalCapacity) * 100 : 0,
+      total_files: records.length,
+      available_files: records.length - borrowedFiles - inTransitFiles,
+      borrowed_files: borrowedFiles,
+      in_transit_files: inTransitFiles,
       areas,
     }),
   );
@@ -363,7 +462,7 @@ router.patch("/blue-file-records/:id", requireAdmin, async (req, res): Promise<v
       res.status(404).json(errorBody("Record not found."));
       return;
     }
-    res.json(UpdateBlueFileResponse.parse(serializeRecord(updated)));
+    res.json(UpdateBlueFileResponse.parse(await serializeWithLoan(updated)));
   } catch (error) {
     if (isUniqueViolation(error)) {
       sendConflict(res, "That work order or storage place is already in use.");
@@ -391,6 +490,12 @@ router.patch("/blue-file-records/:id/move", requireAdmin, async (req, res): Prom
   }
 
   try {
+    const current = await findRecord(params.data.id);
+    if (current?.status === "borrowed") {
+      // documented rule: a borrowed file must be returned before it can be moved
+      sendConflict(res, "This blue file is borrowed. Return it before moving it.");
+      return;
+    }
     await db
       .update(blueFileRecordsTable)
       .set({
@@ -400,13 +505,18 @@ router.patch("/blue-file-records/:id/move", requireAdmin, async (req, res): Prom
         position: location.position,
         slot: location.slot,
       })
-      .where(eq(blueFileRecordsTable.id, params.data.id));
+      .where(
+        and(
+          eq(blueFileRecordsTable.id, params.data.id),
+          ne(blueFileRecordsTable.status, "borrowed"),
+        ),
+      );
     const updated = await findRecord(params.data.id);
     if (!updated) {
       res.status(404).json(errorBody("Record not found."));
       return;
     }
-    res.json(MoveBlueFileResponse.parse(serializeRecord(updated)));
+    res.json(MoveBlueFileResponse.parse(await serializeWithLoan(updated)));
   } catch (error) {
     if (isUniqueViolation(error)) {
       sendConflict(res, "That storage place is already in use.");
@@ -422,14 +532,226 @@ router.delete("/blue-file-records/:id", requireAdmin, async (req, res): Promise<
     res.status(400).json(errorBody(params.error.message));
     return;
   }
+  // A borrowed file must be returned first so the loan history stays accurate.
   const [deleted] = await db
     .delete(blueFileRecordsTable)
-    .where(eq(blueFileRecordsTable.id, params.data.id));
+    .where(
+      and(
+        eq(blueFileRecordsTable.id, params.data.id),
+        ne(blueFileRecordsTable.status, "borrowed"),
+      ),
+    );
   if (deleted.affectedRows === 0) {
+    const [existing] = await db
+      .select({ id: blueFileRecordsTable.id })
+      .from(blueFileRecordsTable)
+      .where(eq(blueFileRecordsTable.id, params.data.id));
+    if (existing) {
+      sendConflict(res, "This blue file is borrowed. Return it before removing it.");
+      return;
+    }
     res.status(404).json(errorBody("Record not found."));
     return;
   }
   res.sendStatus(204);
+});
+
+// --- Custody: Transit Area, borrowing and returning -------------------------
+
+router.post("/blue-file-records/:id/status", requireAdmin, async (req, res): Promise<void> => {
+  const params = SetBlueFileStatusParams.safeParse(req.params);
+  const body = SetBlueFileStatusBody.safeParse(req.body);
+  if (!params.success || !body.success) {
+    res.status(400).json(errorBody("Invalid request."));
+    return;
+  }
+
+  // MySQL: no RETURNING, and UPDATE reports 0 rows when nothing changed, so look the row up instead of counting.
+  const existing = await findRecord(params.data.id);
+  if (!existing) {
+    res.status(404).json(errorBody("Record not found."));
+    return;
+  }
+  if (existing.status === "borrowed") {
+    sendConflict(res, "This blue file is borrowed. Use Return to bring it back first.");
+    return;
+  }
+  await db
+    .update(blueFileRecordsTable)
+    .set({ status: body.data.status })
+    .where(
+      and(
+        eq(blueFileRecordsTable.id, params.data.id),
+        ne(blueFileRecordsTable.status, "borrowed"),
+      ),
+    );
+  const updated = await findRecord(params.data.id);
+  if (!updated || updated.status !== body.data.status) {
+    // raced with a borrow between the check and the update
+    sendConflict(res, "This blue file is borrowed. Use Return to bring it back first.");
+    return;
+  }
+  res.json(SetBlueFileStatusResponse.parse(serializeRecord(updated)));
+});
+
+router.post("/blue-file-records/:id/borrow", requireAdmin, async (req, res): Promise<void> => {
+  const params = BorrowBlueFileParams.safeParse(req.params);
+  const body = BorrowBlueFileBody.safeParse(req.body);
+  if (!params.success || !body.success) {
+    res.status(400).json(errorBody("Borrower name is required."));
+    return;
+  }
+  const borrowerName = body.data.borrower_name.trim();
+  if (!borrowerName) {
+    res.status(400).json(errorBody("Borrower name is required."));
+    return;
+  }
+  const borrowedAt = resolveTimestamp(body.data.borrowed_at);
+  if (!borrowedAt) {
+    res.status(400).json(errorBody("Borrow date is invalid or in the future."));
+    return;
+  }
+
+  try {
+    type BorrowOutcome =
+      | { kind: "missing" }
+      | { kind: "already" }
+      | { kind: "ok"; record: RecordRow; loan: LoanRow };
+    const result = await db.transaction(async (tx): Promise<BorrowOutcome> => {
+      // FOR UPDATE row lock: concurrent borrows of the same file queue up, so only one can win.
+      const [rec] = await tx
+        .select()
+        .from(blueFileRecordsTable)
+        .where(eq(blueFileRecordsTable.id, params.data.id))
+        .for("update");
+      if (!rec) return { kind: "missing" };
+      if (rec.status === "borrowed") return { kind: "already" };
+      const loanId = randomUUID();
+      await tx.insert(blueFileLoansTable).values({
+        id: loanId,
+        recordId: rec.id,
+        wo: rec.wo,
+        no: rec.no,
+        place: rec.place,
+        borrowerName,
+        borrowedAt,
+        borrowRemarks: body.data.remarks?.trim() || null,
+      });
+      await tx
+        .update(blueFileRecordsTable)
+        .set({ status: "borrowed" })
+        .where(eq(blueFileRecordsTable.id, rec.id));
+      const [record] = await tx
+        .select()
+        .from(blueFileRecordsTable)
+        .where(eq(blueFileRecordsTable.id, rec.id));
+      const [loan] = await tx
+        .select()
+        .from(blueFileLoansTable)
+        .where(eq(blueFileLoansTable.id, loanId));
+      return { kind: "ok", record: record!, loan: loan! };
+    });
+
+    if (result.kind === "missing") {
+      res.status(404).json(errorBody("Record not found."));
+      return;
+    }
+    if (result.kind === "already") {
+      sendConflict(res, "This blue file is already borrowed.");
+      return;
+    }
+    res.json(BorrowBlueFileResponse.parse(serializeRecord(result.record, result.loan)));
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      sendConflict(res, "This blue file is already borrowed.");
+      return;
+    }
+    throw error;
+  }
+});
+
+class ReturnError extends Error {
+  constructor(
+    readonly statusCode: 400 | 404 | 409,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+router.post("/blue-file-records/:id/return", requireAdmin, async (req, res): Promise<void> => {
+  const params = ReturnBlueFileParams.safeParse(req.params);
+  const body = ReturnBlueFileBody.safeParse(req.body);
+  if (!params.success || !body.success) {
+    res.status(400).json(errorBody("Invalid request."));
+    return;
+  }
+  const returnedAt = resolveTimestamp(body.data.returned_at);
+  if (!returnedAt) {
+    res.status(400).json(errorBody("Return date is invalid or in the future."));
+    return;
+  }
+
+  try {
+    const record = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(blueFileRecordsTable)
+        .where(eq(blueFileRecordsTable.id, params.data.id))
+        .for("update");
+      if (!existing) throw new ReturnError(404, "Record not found.");
+
+      const [loan] = await tx
+        .select()
+        .from(blueFileLoansTable)
+        .where(
+          and(
+            eq(blueFileLoansTable.recordId, existing.id),
+            isNull(blueFileLoansTable.returnedAt),
+          ),
+        );
+      if (existing.status !== "borrowed" || !loan) {
+        throw new ReturnError(409, "This blue file is not currently borrowed.");
+      }
+      if (returnedAt.getTime() < loan.borrowedAt.getTime()) {
+        throw new ReturnError(400, "The return date cannot be before the borrow date.");
+      }
+
+      await tx
+        .update(blueFileLoansTable)
+        .set({
+          returnedAt,
+          returnedTo: body.data.return_to,
+          returnRemarks: body.data.remarks?.trim() || null,
+        })
+        .where(eq(blueFileLoansTable.id, loan.id));
+      await tx
+        .update(blueFileRecordsTable)
+        .set({ status: body.data.return_to })
+        .where(eq(blueFileRecordsTable.id, existing.id));
+      const [updated] = await tx
+        .select()
+        .from(blueFileRecordsTable)
+        .where(eq(blueFileRecordsTable.id, existing.id));
+      return updated;
+    });
+    res.json(ReturnBlueFileResponse.parse(serializeRecord(record)));
+  } catch (error) {
+    if (error instanceof ReturnError) {
+      res.status(error.statusCode).json(errorBody(error.message));
+      return;
+    }
+    throw error;
+  }
+});
+
+router.get("/blue-file-loans", readAccess, async (_req, res): Promise<void> => {
+  const loans = await db
+    .select()
+    .from(blueFileLoansTable)
+    .orderBy(desc(blueFileLoansTable.borrowedAt));
+  const now = new Date();
+  res.json(ListBlueFileLoansResponse.parse(loans.map((loan) => serializeLoan(loan, now))));
 });
 
 export default router;

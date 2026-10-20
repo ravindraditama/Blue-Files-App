@@ -27,6 +27,9 @@ export const blueFileRecordsTable = mysqlTable(
     dateIn: varchar("date_in", { length: 64 }),
     timeIn: varchar("time_in", { length: 64 }),
     pic: varchar("pic", { length: 255 }),
+    // available = in its rack slot, in_transit = taken out but not yet placed,
+    // borrowed = checked out to a person (see blue_file_loans).
+    status: varchar("status", { length: 16 }).notNull().default("available"),
     createdAt: timestamp("created_at", { mode: "date" })
       .notNull()
       .defaultNow(),
@@ -52,6 +55,11 @@ export const blueFileRecordsTable = mysqlTable(
       sql`${table.position} IN ('L', 'M', 'R')`,
     ),
     check("blue_file_records_slot_check", sql`${table.slot} > 0`),
+    check(
+      "blue_file_records_status_check",
+      sql`${table.status} IN ('available', 'borrowed', 'in_transit')`,
+    ),
+    index("blue_file_records_status_idx").on(table.status),
   ],
 );
 

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BlueFileRecordPosition } from './blueFileRecordPosition';
+import type { BlueFileStatus } from './blueFileStatus';
 
 export interface BlueFileRecord {
   id: string;
@@ -25,6 +26,15 @@ export interface BlueFileRecord {
   time_in: string | null;
   /** @nullable */
   pic: string | null;
+  status: BlueFileStatus;
+  /** Where the file is right now, e.g. Rack A01L-001, Transit Area, Borrowed by Jane */
+  current_location: string;
+  /** @nullable */
+  borrower_name: string | null;
+  /** @nullable */
+  borrowed_at: Date | null;
+  /** @nullable */
+  borrow_remarks: string | null;
   created_at: Date;
   updated_at: Date;
 }

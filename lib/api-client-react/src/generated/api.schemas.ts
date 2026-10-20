@@ -22,6 +22,15 @@ export const BlueFileRecordPosition = {
   R: 'R',
 } as const;
 
+export type BlueFileStatus = typeof BlueFileStatus[keyof typeof BlueFileStatus];
+
+
+export const BlueFileStatus = {
+  available: 'available',
+  borrowed: 'borrowed',
+  in_transit: 'in_transit',
+} as const;
+
 export interface BlueFileRecord {
   id: string;
   /** @nullable */
@@ -40,6 +49,15 @@ export interface BlueFileRecord {
   time_in: string | null;
   /** @nullable */
   pic: string | null;
+  status: BlueFileStatus;
+  /** Where the file is right now, e.g. Rack A01L-001, Transit Area, Borrowed by Jane */
+  current_location: string;
+  /** @nullable */
+  borrower_name: string | null;
+  /** @nullable */
+  borrowed_at: string | null;
+  /** @nullable */
+  borrow_remarks: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -111,6 +129,81 @@ export interface BlueFileSummary {
   occupied: number;
   empty: number;
   utilization: number;
+  total_files: number;
+  available_files: number;
+  borrowed_files: number;
+  in_transit_files: number;
   areas: BlueFileAreaSummary[];
 }
 
+export type BlueFileStatusInputStatus = typeof BlueFileStatusInputStatus[keyof typeof BlueFileStatusInputStatus];
+
+
+export const BlueFileStatusInputStatus = {
+  available: 'available',
+  in_transit: 'in_transit',
+} as const;
+
+export interface BlueFileStatusInput {
+  status: BlueFileStatusInputStatus;
+}
+
+export interface BlueFileBorrowInput {
+  /** @minLength 1 */
+  borrower_name: string;
+  /** Defaults to now
+   * @nullable */
+  borrowed_at?: string | null;
+  /** @nullable */
+  remarks?: string | null;
+}
+
+export type BlueFileReturnInputReturnTo = typeof BlueFileReturnInputReturnTo[keyof typeof BlueFileReturnInputReturnTo];
+
+
+export const BlueFileReturnInputReturnTo = {
+  available: 'available',
+  in_transit: 'in_transit',
+} as const;
+
+export interface BlueFileReturnInput {
+  return_to: BlueFileReturnInputReturnTo;
+  /** Defaults to now
+   * @nullable */
+  returned_at?: string | null;
+  /** @nullable */
+  remarks?: string | null;
+}
+
+export type BlueFileLoanReturnedTo = typeof BlueFileLoanReturnedTo[keyof typeof BlueFileLoanReturnedTo];
+
+
+export const BlueFileLoanReturnedTo = {
+  available: 'available',
+  in_transit: 'in_transit',
+} as const;
+
+export interface BlueFileLoan {
+  id: string;
+  /** @nullable */
+  record_id: string | null;
+  /** @nullable */
+  no: number | null;
+  wo: string;
+  place: string;
+  borrower_name: string;
+  borrowed_at: string;
+  /** @nullable */
+  borrow_remarks: string | null;
+  /** @nullable */
+  returned_at: string | null;
+  /** @nullable */
+  returned_to: BlueFileLoanReturnedTo | null;
+  /** @nullable */
+  return_remarks: string | null;
+  /** Minutes borrowed so far (open loans) or in total (returned loans) */
+  duration_minutes: number;
+  is_active: boolean;
+}
+
+export type BlueFileLoanList = BlueFileLoan[];
