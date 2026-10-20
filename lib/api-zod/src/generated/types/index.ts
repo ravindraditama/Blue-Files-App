@@ -7,14 +7,23 @@
  */
 
 export * from './blueFileAreaSummary';
+export * from './blueFileBorrowInput';
 export * from './blueFileImportInput';
 export * from './blueFileImportResult';
+export * from './blueFileLoan';
+export * from './blueFileLoanList';
+export * from './blueFileLoanReturnedTo';
 export * from './blueFileLocationInput';
 export * from './blueFileRecord';
 export * from './blueFileRecordInput';
 export * from './blueFileRecordInputPosition';
 export * from './blueFileRecordList';
 export * from './blueFileRecordPosition';
+export * from './blueFileReturnInput';
+export * from './blueFileReturnInputReturnTo';
+export * from './blueFileStatus';
+export * from './blueFileStatusInput';
+export * from './blueFileStatusInputStatus';
 export * from './blueFileSummary';
 export * from './errorResponse';
 export * from './healthStatus';

@@ -33,6 +33,11 @@ export const ListBlueFilesResponseItem = zod.object({
   "date_in": zod.string().nullable(),
   "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
+  "status": zod.enum(['available', 'borrowed', 'in_transit']),
+  "current_location": zod.string(),
+  "borrower_name": zod.string().nullable(),
+  "borrowed_at": zod.coerce.date().nullable(),
+  "borrow_remarks": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
 })
@@ -76,6 +81,11 @@ export const CreateBlueFileResponse = zod.object({
   "date_in": zod.string().nullable(),
   "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
+  "status": zod.enum(['available', 'borrowed', 'in_transit']),
+  "current_location": zod.string(),
+  "borrower_name": zod.string().nullable(),
+  "borrowed_at": zod.coerce.date().nullable(),
+  "borrow_remarks": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
 })
@@ -89,6 +99,10 @@ export const GetBlueFilesSummaryResponse = zod.object({
   "occupied": zod.number().int(),
   "empty": zod.number().int(),
   "utilization": zod.number(),
+  "total_files": zod.number().int(),
+  "available_files": zod.number().int(),
+  "borrowed_files": zod.number().int(),
+  "in_transit_files": zod.number().int(),
   "areas": zod.array(zod.object({
   "area": zod.string(),
   "occupied": zod.number().int(),
@@ -175,6 +189,11 @@ export const UpdateBlueFileResponse = zod.object({
   "date_in": zod.string().nullable(),
   "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
+  "status": zod.enum(['available', 'borrowed', 'in_transit']),
+  "current_location": zod.string(),
+  "borrower_name": zod.string().nullable(),
+  "borrowed_at": zod.coerce.date().nullable(),
+  "borrow_remarks": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
 })
@@ -217,8 +236,138 @@ export const MoveBlueFileResponse = zod.object({
   "date_in": zod.string().nullable(),
   "time_in": zod.string().nullable(),
   "pic": zod.string().nullable(),
+  "status": zod.enum(['available', 'borrowed', 'in_transit']),
+  "current_location": zod.string(),
+  "borrower_name": zod.string().nullable(),
+  "borrowed_at": zod.coerce.date().nullable(),
+  "borrow_remarks": zod.string().nullable(),
   "created_at": zod.coerce.date(),
   "updated_at": zod.coerce.date()
 })
 
 
+/**
+ * @summary Move a record between its rack slot and the Transit Area
+ */
+export const SetBlueFileStatusParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const SetBlueFileStatusBody = zod.object({
+  "status": zod.enum(['available', 'in_transit'])
+})
+
+export const SetBlueFileStatusResponse = zod.object({
+  "id": zod.string().uuid(),
+  "no": zod.number().int().nullable(),
+  "wo": zod.string(),
+  "complete": zod.string().nullable(),
+  "place": zod.string(),
+  "area": zod.string(),
+  "rack": zod.number().int(),
+  "position": zod.enum(['L', 'M', 'R']),
+  "slot": zod.number().int(),
+  "date_in": zod.string().nullable(),
+  "time_in": zod.string().nullable(),
+  "pic": zod.string().nullable(),
+  "status": zod.enum(['available', 'borrowed', 'in_transit']),
+  "current_location": zod.string(),
+  "borrower_name": zod.string().nullable(),
+  "borrowed_at": zod.coerce.date().nullable(),
+  "borrow_remarks": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Record that a blue file has been borrowed
+ */
+export const BorrowBlueFileParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const BorrowBlueFileBody = zod.object({
+  "borrower_name": zod.string().min(1),
+  "borrowed_at": zod.string().datetime({}).nullish(),
+  "remarks": zod.string().nullish()
+})
+
+export const BorrowBlueFileResponse = zod.object({
+  "id": zod.string().uuid(),
+  "no": zod.number().int().nullable(),
+  "wo": zod.string(),
+  "complete": zod.string().nullable(),
+  "place": zod.string(),
+  "area": zod.string(),
+  "rack": zod.number().int(),
+  "position": zod.enum(['L', 'M', 'R']),
+  "slot": zod.number().int(),
+  "date_in": zod.string().nullable(),
+  "time_in": zod.string().nullable(),
+  "pic": zod.string().nullable(),
+  "status": zod.enum(['available', 'borrowed', 'in_transit']),
+  "current_location": zod.string(),
+  "borrower_name": zod.string().nullable(),
+  "borrowed_at": zod.coerce.date().nullable(),
+  "borrow_remarks": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Return a borrowed blue file to its rack slot or the Transit Area
+ */
+export const ReturnBlueFileParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const ReturnBlueFileBody = zod.object({
+  "return_to": zod.enum(['available', 'in_transit']),
+  "returned_at": zod.string().datetime({}).nullish(),
+  "remarks": zod.string().nullish()
+})
+
+export const ReturnBlueFileResponse = zod.object({
+  "id": zod.string().uuid(),
+  "no": zod.number().int().nullable(),
+  "wo": zod.string(),
+  "complete": zod.string().nullable(),
+  "place": zod.string(),
+  "area": zod.string(),
+  "rack": zod.number().int(),
+  "position": zod.enum(['L', 'M', 'R']),
+  "slot": zod.number().int(),
+  "date_in": zod.string().nullable(),
+  "time_in": zod.string().nullable(),
+  "pic": zod.string().nullable(),
+  "status": zod.enum(['available', 'borrowed', 'in_transit']),
+  "current_location": zod.string(),
+  "borrower_name": zod.string().nullable(),
+  "borrowed_at": zod.coerce.date().nullable(),
+  "borrow_remarks": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary Borrowing history for all blue files, newest first
+ */
+export const ListBlueFileLoansResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "record_id": zod.string().uuid().nullable(),
+  "no": zod.number().int().nullable(),
+  "wo": zod.string(),
+  "place": zod.string(),
+  "borrower_name": zod.string(),
+  "borrowed_at": zod.coerce.date(),
+  "borrow_remarks": zod.string().nullable(),
+  "returned_at": zod.coerce.date().nullable(),
+  "returned_to": zod.enum(['available', 'in_transit']).nullable(),
+  "return_remarks": zod.string().nullable(),
+  "duration_minutes": zod.number().int(),
+  "is_active": zod.boolean()
+})
+export const ListBlueFileLoansResponse = zod.array(ListBlueFileLoansResponseItem)

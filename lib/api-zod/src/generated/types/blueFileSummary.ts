@@ -12,5 +12,9 @@ export interface BlueFileSummary {
   occupied: number;
   empty: number;
   utilization: number;
+  total_files: number;
+  available_files: number;
+  borrowed_files: number;
+  in_transit_files: number;
   areas: BlueFileAreaSummary[];
 }
