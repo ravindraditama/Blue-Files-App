@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BlueFileRecordPosition } from './blueFileRecordPosition';
+import type { BlueFileStatus } from './blueFileStatus';
 
 export interface BlueFileRecord {
   id: string;
@@ -15,16 +16,45 @@ export interface BlueFileRecord {
   /** @nullable */
   complete: string | null;
   place: string;
-  area: string;
-  rack: number;
-  position: BlueFileRecordPosition;
-  slot: number;
+  /** Null while the file is in TRANSIT
+   * @nullable */
+  area: string | null;
+  /** @nullable */
+  rack: number | null;
+  /** @nullable */
+  position: BlueFileRecordPosition | null;
+  /** @nullable */
+  slot: number | null;
   /** @nullable */
   date_in: string | null;
   /** @nullable */
   time_in: string | null;
   /** @nullable */
   pic: string | null;
+  status: BlueFileStatus;
+  /** Where the file is right now, e.g. Rack A01L-001, TRANSIT, Borrowed by Jane */
+  current_location: string;
+  /** @nullable */
+  borrower_name: string | null;
+  /** @nullable */
+  borrowed_at: Date | null;
+  /** @nullable */
+  borrow_remarks: string | null;
+  /** @nullable */
+  previous_place: string | null;
+  /** @nullable */
+  destination_place: string | null;
+  /** @nullable */
+  transit_at: Date | null;
+  /** @nullable */
+  transit_by: string | null;
+  /** @nullable */
+  received_at: Date | null;
+  /** @nullable */
+  received_by: string | null;
+  /** Minutes in TRANSIT so far; null when not in transit
+   * @nullable */
+  transit_duration_minutes: number | null;
   created_at: Date;
   updated_at: Date;
 }

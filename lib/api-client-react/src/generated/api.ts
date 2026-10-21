@@ -20,12 +20,18 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BlueFileAuditLog,
+  BlueFileBorrowInput,
   BlueFileImportInput,
   BlueFileImportResult,
+  BlueFileLoanList,
   BlueFileLocationInput,
   BlueFileRecord,
   BlueFileRecordInput,
   BlueFileRecordList,
+  BlueFileReturnInput,
+  BlueFileTransitCompleteInput,
+  BlueFileTransitInput,
   BlueFileSummary,
   ErrorResponse,
   HealthStatus
@@ -718,3 +724,504 @@ export const useMoveBlueFile = <TError = ErrorType<ErrorResponse>,
       return useMutation(getMoveBlueFileMutationOptions(options));
     }
 
+export const getStartBlueFileTransitUrl = (id: string,) => {
+
+
+
+
+  return `/api/blue-file-records/${id}/transit`
+}
+
+/**
+ * @summary Move a file into the TRANSIT place
+ */
+export const startBlueFileTransit = async (id: string,
+    blueFileTransitInput: BlueFileTransitInput, options?: Parameters<typeof customFetch>[1]): Promise<BlueFileRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<BlueFileRecord>(getStartBlueFileTransitUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(blueFileTransitInput)
+  }
+);}
+
+
+
+
+
+export const getStartBlueFileTransitMutationKey = () => ['startBlueFileTransit'] as const;
+
+export const getStartBlueFileTransitMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startBlueFileTransit>>, TError,StartBlueFileTransitMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startBlueFileTransit>>, TError,StartBlueFileTransitMutationVariables, TContext> => {
+
+const mutationKey = getStartBlueFileTransitMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startBlueFileTransit>>, StartBlueFileTransitMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startBlueFileTransit(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartBlueFileTransitMutationResult = NonNullable<Awaited<ReturnType<typeof startBlueFileTransit>>>
+    export type StartBlueFileTransitMutationBody = BodyType<BlueFileTransitInput>
+    export type StartBlueFileTransitMutationError = ErrorType<ErrorResponse>
+    export type StartBlueFileTransitMutationVariables = {id: string;data: BodyType<BlueFileTransitInput>}
+
+    /**
+ * @summary Move a file into the TRANSIT place
+ */
+export const useStartBlueFileTransit = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startBlueFileTransit>>, TError,StartBlueFileTransitMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startBlueFileTransit>>,
+        TError,
+        StartBlueFileTransitMutationVariables,
+        TContext
+      > => {
+      return useMutation(getStartBlueFileTransitMutationOptions(options));
+    }
+
+export const getCompleteBlueFileTransitUrl = (id: string,) => {
+
+
+
+
+  return `/api/blue-file-records/${id}/transit/complete`
+}
+
+/**
+ * @summary Deliver a file from TRANSIT to its destination place
+ */
+export const completeBlueFileTransit = async (id: string,
+    blueFileTransitCompleteInput: BlueFileTransitCompleteInput, options?: Parameters<typeof customFetch>[1]): Promise<BlueFileRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<BlueFileRecord>(getCompleteBlueFileTransitUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(blueFileTransitCompleteInput)
+  }
+);}
+
+
+
+
+
+export const getCompleteBlueFileTransitMutationKey = () => ['completeBlueFileTransit'] as const;
+
+export const getCompleteBlueFileTransitMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeBlueFileTransit>>, TError,CompleteBlueFileTransitMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeBlueFileTransit>>, TError,CompleteBlueFileTransitMutationVariables, TContext> => {
+
+const mutationKey = getCompleteBlueFileTransitMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeBlueFileTransit>>, CompleteBlueFileTransitMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  completeBlueFileTransit(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteBlueFileTransitMutationResult = NonNullable<Awaited<ReturnType<typeof completeBlueFileTransit>>>
+    export type CompleteBlueFileTransitMutationBody = BodyType<BlueFileTransitCompleteInput>
+    export type CompleteBlueFileTransitMutationError = ErrorType<ErrorResponse>
+    export type CompleteBlueFileTransitMutationVariables = {id: string;data: BodyType<BlueFileTransitCompleteInput>}
+
+    /**
+ * @summary Deliver a file from TRANSIT to its destination place
+ */
+export const useCompleteBlueFileTransit = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeBlueFileTransit>>, TError,CompleteBlueFileTransitMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeBlueFileTransit>>,
+        TError,
+        CompleteBlueFileTransitMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCompleteBlueFileTransitMutationOptions(options));
+    }
+
+export const getBorrowBlueFileUrl = (id: string,) => {
+
+
+
+
+  return `/api/blue-file-records/${id}/borrow`
+}
+
+/**
+ * @summary Record that a blue file has been borrowed
+ */
+export const borrowBlueFile = async (id: string,
+    blueFileBorrowInput: BlueFileBorrowInput, options?: Parameters<typeof customFetch>[1]): Promise<BlueFileRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<BlueFileRecord>(getBorrowBlueFileUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(blueFileBorrowInput)
+  }
+);}
+
+
+
+
+
+export const getBorrowBlueFileMutationKey = () => ['borrowBlueFile'] as const;
+
+export const getBorrowBlueFileMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof borrowBlueFile>>, TError,BorrowBlueFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof borrowBlueFile>>, TError,BorrowBlueFileMutationVariables, TContext> => {
+
+const mutationKey = getBorrowBlueFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof borrowBlueFile>>, BorrowBlueFileMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  borrowBlueFile(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BorrowBlueFileMutationResult = NonNullable<Awaited<ReturnType<typeof borrowBlueFile>>>
+    export type BorrowBlueFileMutationBody = BodyType<BlueFileBorrowInput>
+    export type BorrowBlueFileMutationError = ErrorType<ErrorResponse>
+    export type BorrowBlueFileMutationVariables = {id: string;data: BodyType<BlueFileBorrowInput>}
+
+    /**
+ * @summary Record that a blue file has been borrowed
+ */
+export const useBorrowBlueFile = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof borrowBlueFile>>, TError,BorrowBlueFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof borrowBlueFile>>,
+        TError,
+        BorrowBlueFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getBorrowBlueFileMutationOptions(options));
+    }
+
+
+
+export const getReturnBlueFileUrl = (id: string,) => {
+
+
+
+
+  return `/api/blue-file-records/${id}/return`
+}
+
+/**
+ * @summary Return a borrowed blue file to its rack slot or the Transit Area
+ */
+export const returnBlueFile = async (id: string,
+    blueFileReturnInput: BlueFileReturnInput, options?: Parameters<typeof customFetch>[1]): Promise<BlueFileRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<BlueFileRecord>(getReturnBlueFileUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(blueFileReturnInput)
+  }
+);}
+
+
+
+
+
+export const getReturnBlueFileMutationKey = () => ['returnBlueFile'] as const;
+
+export const getReturnBlueFileMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnBlueFile>>, TError,ReturnBlueFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof returnBlueFile>>, TError,ReturnBlueFileMutationVariables, TContext> => {
+
+const mutationKey = getReturnBlueFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof returnBlueFile>>, ReturnBlueFileMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  returnBlueFile(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReturnBlueFileMutationResult = NonNullable<Awaited<ReturnType<typeof returnBlueFile>>>
+    export type ReturnBlueFileMutationBody = BodyType<BlueFileReturnInput>
+    export type ReturnBlueFileMutationError = ErrorType<ErrorResponse>
+    export type ReturnBlueFileMutationVariables = {id: string;data: BodyType<BlueFileReturnInput>}
+
+    /**
+ * @summary Return a borrowed blue file to its rack slot or the Transit Area
+ */
+export const useReturnBlueFile = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnBlueFile>>, TError,ReturnBlueFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof returnBlueFile>>,
+        TError,
+        ReturnBlueFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReturnBlueFileMutationOptions(options));
+    }
+
+
+
+export const getListBlueFileLoansUrl = () => {
+
+
+
+
+  return `/api/blue-file-loans`
+}
+
+/**
+ * @summary Borrowing history for all blue files, newest first
+ */
+export const listBlueFileLoans = async ( options?: Parameters<typeof customFetch>[1]): Promise<BlueFileLoanList> => {
+
+  return customFetch<BlueFileLoanList>(getListBlueFileLoansUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBlueFileLoansQueryKey = () => {
+    return [
+    `/api/blue-file-loans`
+    ] as const;
+    }
+
+
+export const getListBlueFileLoansQueryOptions = <TData = Awaited<ReturnType<typeof listBlueFileLoans>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBlueFileLoans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBlueFileLoansQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBlueFileLoans>>> = ({ signal }) => listBlueFileLoans({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBlueFileLoans>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBlueFileLoansQueryResult = NonNullable<Awaited<ReturnType<typeof listBlueFileLoans>>>
+export type ListBlueFileLoansQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Borrowing history for all blue files, newest first
+ */
+
+export function useListBlueFileLoans<TData = Awaited<ReturnType<typeof listBlueFileLoans>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBlueFileLoans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBlueFileLoansQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getListBlueFileAuditLogUrl = () => {
+
+
+
+
+  return `/api/blue-file-audit-log`
+}
+
+/**
+ * @summary Transit audit trail, newest first
+ */
+export const listBlueFileAuditLog = async ( options?: Parameters<typeof customFetch>[1]): Promise<BlueFileAuditLog> => {
+
+  return customFetch<BlueFileAuditLog>(getListBlueFileAuditLogUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBlueFileAuditLogQueryKey = () => {
+    return [
+    `/api/blue-file-audit-log`
+    ] as const;
+    }
+
+
+export const getListBlueFileAuditLogQueryOptions = <TData = Awaited<ReturnType<typeof listBlueFileAuditLog>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBlueFileAuditLog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBlueFileAuditLogQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBlueFileAuditLog>>> = ({ signal }) => listBlueFileAuditLog({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBlueFileAuditLog>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBlueFileAuditLogQueryResult = NonNullable<Awaited<ReturnType<typeof listBlueFileAuditLog>>>
+export type ListBlueFileAuditLogQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Transit audit trail, newest first
+ */
+
+export function useListBlueFileAuditLog<TData = Awaited<ReturnType<typeof listBlueFileAuditLog>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBlueFileAuditLog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBlueFileAuditLogQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}

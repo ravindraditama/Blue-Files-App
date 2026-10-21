@@ -208,6 +208,202 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /blue-file-records/{id}/transit:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: startBlueFileTransit
+      tags: [blue-files]
+      summary: Move a file into the TRANSIT place
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlueFileTransitInput"
+      responses:
+        "200":
+          description: Updated blue file record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueFileRecord"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: File cannot enter transit (borrowed, already in transit, or destination taken)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /blue-file-records/{id}/transit/complete:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: completeBlueFileTransit
+      tags: [blue-files]
+      summary: Deliver a file from TRANSIT to its destination place
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlueFileTransitCompleteInput"
+      responses:
+        "200":
+          description: Updated blue file record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueFileRecord"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: File is not in transit, or the destination is taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /blue-file-records/{id}/borrow:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: borrowBlueFile
+      tags: [blue-files]
+      summary: Record that a blue file has been borrowed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlueFileBorrowInput"
+      responses:
+        "200":
+          description: Updated blue file record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueFileRecord"
+        "400":
+          description: Invalid borrower or date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Blue file is already borrowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /blue-file-records/{id}/return:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: returnBlueFile
+      tags: [blue-files]
+      summary: Return a borrowed blue file to its rack slot or the Transit Area
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlueFileReturnInput"
+      responses:
+        "200":
+          description: Updated blue file record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueFileRecord"
+        "400":
+          description: Invalid return date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Blue file is not currently borrowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /blue-file-loans:
+    get:
+      operationId: listBlueFileLoans
+      tags: [blue-files]
+      summary: Borrowing history for all blue files, newest first
+      responses:
+        "200":
+          description: Every loan, open and returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueFileLoanList"
+  /blue-file-audit-log:
+    get:
+      operationId: listBlueFileAuditLog
+      tags: [blue-files]
+      summary: Transit audit trail, newest first
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueFileAuditLog"
 components:
   schemas:
     HealthStatus:
@@ -223,6 +419,9 @@ components:
         error:
           type: string
       required: [error]
+    BlueFileStatus:
+      type: string
+      enum: [available, borrowed, in_transit]
     BlueFileRecord:
       type: object
       properties:
@@ -238,20 +437,50 @@ components:
         place:
           type: string
         area:
-          type: string
+          type: [string, "null"]
+          description: Null while the file is in TRANSIT
         rack:
-          type: integer
+          type: [integer, "null"]
         position:
-          type: string
-          enum: [L, M, R]
+          type: [string, "null"]
+          enum: [L, M, R, null]
         slot:
-          type: integer
+          type: [integer, "null"]
         date_in:
           type: [string, "null"]
         time_in:
           type: [string, "null"]
         pic:
           type: [string, "null"]
+        status:
+          $ref: "#/components/schemas/BlueFileStatus"
+        current_location:
+          type: string
+          description: "Where the file is right now, e.g. Rack A01L-001, TRANSIT, Borrowed by Jane"
+        borrower_name:
+          type: [string, "null"]
+        borrowed_at:
+          type: [string, "null"]
+          format: date-time
+        borrow_remarks:
+          type: [string, "null"]
+        previous_place:
+          type: [string, "null"]
+        destination_place:
+          type: [string, "null"]
+        transit_at:
+          type: [string, "null"]
+          format: date-time
+        transit_by:
+          type: [string, "null"]
+        received_at:
+          type: [string, "null"]
+          format: date-time
+        received_by:
+          type: [string, "null"]
+        transit_duration_minutes:
+          type: [integer, "null"]
+          description: Minutes in TRANSIT so far; null when not in transit
         created_at:
           type: string
           format: date-time
@@ -271,6 +500,18 @@ components:
         - date_in
         - time_in
         - pic
+        - status
+        - current_location
+        - borrower_name
+        - borrowed_at
+        - borrow_remarks
+        - previous_place
+        - destination_place
+        - transit_at
+        - transit_by
+        - received_at
+        - received_by
+        - transit_duration_minutes
         - created_at
         - updated_at
     BlueFileRecordList:
@@ -361,9 +602,180 @@ components:
           type: integer
         utilization:
           type: number
+        total_files:
+          type: integer
+        available_files:
+          type: integer
+        borrowed_files:
+          type: integer
+        in_transit_files:
+          type: integer
         areas:
           type: array
           items:
             $ref: "#/components/schemas/BlueFileAreaSummary"
-      required: [total_capacity, occupied, empty, utilization, areas]
-
+      required:
+        - total_capacity
+        - occupied
+        - empty
+        - utilization
+        - total_files
+        - available_files
+        - borrowed_files
+        - in_transit_files
+        - areas
+    BlueFileTransitInput:
+      type: object
+      properties:
+        destination_place:
+          type: string
+          description: Rack place the file is going to, e.g. B05L-003
+        transit_by:
+          type: string
+          minLength: 1
+        remarks:
+          type: [string, "null"]
+      required: [destination_place, transit_by]
+    BlueFileTransitCompleteInput:
+      type: object
+      properties:
+        received_by:
+          type: string
+          minLength: 1
+        destination_place:
+          type: [string, "null"]
+          description: Overrides the destination chosen when the transit started
+        received_at:
+          type: [string, "null"]
+          format: date-time
+          description: Defaults to now
+        remarks:
+          type: [string, "null"]
+      required: [received_by]
+    BlueFileBorrowInput:
+      type: object
+      properties:
+        borrower_name:
+          type: string
+          minLength: 1
+        borrowed_at:
+          type: [string, "null"]
+          format: date-time
+          description: Defaults to now
+        remarks:
+          type: [string, "null"]
+      required: [borrower_name]
+    BlueFileReturnInput:
+      type: object
+      properties:
+        return_to:
+          type: string
+          enum: [available, in_transit]
+        transit_by:
+          type: [string, "null"]
+          description: Required when return_to is in_transit
+        destination_place:
+          type: [string, "null"]
+          description: Destination when return_to is in_transit; defaults to the file's own rack place
+        returned_at:
+          type: [string, "null"]
+          format: date-time
+          description: Defaults to now
+        remarks:
+          type: [string, "null"]
+      required: [return_to]
+    BlueFileLoan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        record_id:
+          type: [string, "null"]
+          format: uuid
+        no:
+          type: [integer, "null"]
+        wo:
+          type: string
+        place:
+          type: string
+        borrower_name:
+          type: string
+        borrowed_at:
+          type: string
+          format: date-time
+        borrow_remarks:
+          type: [string, "null"]
+        returned_at:
+          type: [string, "null"]
+          format: date-time
+        returned_to:
+          type: [string, "null"]
+          enum: [available, in_transit, null]
+        return_remarks:
+          type: [string, "null"]
+        duration_minutes:
+          type: integer
+          description: Minutes borrowed so far (open loans) or in total (returned loans)
+        is_active:
+          type: boolean
+      required:
+        - id
+        - record_id
+        - no
+        - wo
+        - place
+        - borrower_name
+        - borrowed_at
+        - borrow_remarks
+        - returned_at
+        - returned_to
+        - return_remarks
+        - duration_minutes
+        - is_active
+    BlueFileLoanList:
+      type: array
+      items:
+        $ref: "#/components/schemas/BlueFileLoan"
+    BlueFileAuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        record_id:
+          type: [string, "null"]
+          format: uuid
+        no:
+          type: [integer, "null"]
+        wo:
+          type: string
+        event_type:
+          type: string
+          enum: [moved_to_transit, delivered_from_transit]
+        source_place:
+          type: string
+        destination_place:
+          type: string
+        performed_by:
+          type: string
+        remarks:
+          type: [string, "null"]
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - record_id
+        - no
+        - wo
+        - event_type
+        - source_place
+        - destination_place
+        - performed_by
+        - remarks
+        - occurred_at
+    BlueFileAuditLog:
+      type: array
+      items:
+        $ref: "#/components/schemas/BlueFileAuditEntry"

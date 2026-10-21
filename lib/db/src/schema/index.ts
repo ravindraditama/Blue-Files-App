@@ -18,3 +18,5 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./blue-file-records";
+export * from "./blue-file-loans";
+export * from "./blue-file-audit-log";
